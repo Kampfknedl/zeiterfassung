@@ -218,6 +218,43 @@ class RootWidget(BoxLayout):
             except Exception:
                 return self.get_db_dir()
 
+    def share_pdf(self, filepath):
+        # Open Android share intent for the PDF file
+        try:
+            from jnius import autoclass, cast
+            PythonJavaClass = autoclass('org.kivy.android.PythonActivity')
+            Intent = autoclass('android.content.Intent')
+            Uri = autoclass('android.net.Uri')
+            File = autoclass('java.io.File')
+            FileProvider = autoclass('androidx.core.content.FileProvider')
+
+            # Create file object
+            java_file = File(filepath)
+            
+            # Try FileProvider for secure sharing (Android 7+)
+            try:
+                context = PythonJavaClass.mActivity
+                authority = f"{context.getPackageName()}.fileprovider"
+                file_uri = FileProvider.getUriForFile(context, authority, java_file)
+            except Exception:
+                # Fallback to direct file:// URI
+                file_uri = Uri.fromFile(java_file)
+
+            # Create share intent
+            intent = Intent()
+            intent.setAction(Intent.ACTION_SEND)
+            intent.putExtra(Intent.EXTRA_STREAM, file_uri)
+            intent.setType("application/pdf")
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
+            # Start share intent chooser
+            chooser = Intent.createChooser(intent, "Report teilen über...")
+            PythonJavaClass.mActivity.startActivity(chooser)
+        except Exception as e:
+            from kivy.uix.popup import Popup
+            from kivy.uix.label import Label
+            Popup(title='Fehler', content=Label(text=f'Fehler beim Teilen: {e}'), size_hint=(.8, .3)).open()
+
     def load_customers(self):
         path = self.get_db_path()
         self.customers = db.get_customers(path)
@@ -500,7 +537,25 @@ class RootWidget(BoxLayout):
 
         from kivy.uix.popup import Popup
         from kivy.uix.label import Label
-        Popup(title='Erfolg', content=Label(text=f'Report erstellt: {filename}'), size_hint=(.7, .3)).open()
+        # Show success popup with share button
+        content = BoxLayout(orientation='vertical', spacing=8)
+        content.add_widget(Label(text=f'Report erstellt:', size_hint_y=None, height='30dp'))
+        content.add_widget(Label(text=filename, size_hint_y=None, height='40dp'))
+        btn_box = BoxLayout(size_hint_y=None, height='40dp', spacing=8)
+        share_btn = Button(text='Teilen')
+        close_btn = Button(text='OK')
+        btn_box.add_widget(share_btn)
+        btn_box.add_widget(close_btn)
+        content.add_widget(btn_box)
+        popup = Popup(title='Erfolg', content=content, size_hint=(.85, .35))
+
+        def do_share(*a):
+            self.share_pdf(filename)
+            popup.dismiss()
+
+        share_btn.bind(on_release=do_share)
+        close_btn.bind(on_release=popup.dismiss)
+        popup.open()
 
     def refresh_entries(self):
         # ensure UI has been built and ids available
