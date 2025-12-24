@@ -505,27 +505,57 @@ class RootWidget(BoxLayout):
             Popup(title='Info', content=Label(text='Keine Einträge für den ausgewählten Kunden'), size_hint=(.6, .3)).open()
             return
 
-        # Table header
-        pdf.set_font("Arial", "B", 11)
-        pdf.cell(100, 8, "Tätigkeit", border=1)
-        pdf.cell(40, 8, "Datum", border=1)
-        pdf.cell(30, 8, "Stunden", border=1, ln=True)
-
-        # Table rows
-        total = 0.0
-        pdf.set_font("Arial", size=10)
+        # Group entries by month (YYYY-MM)
+        from collections import defaultdict
+        months_data = defaultdict(list)
         for r in rows:
-            act = (r[2] or '')[:60]
-            date = (r[3] or '')[:10]
-            hrs = float(r[5] or 0)
-            pdf.cell(100, 8, act, border=1)
-            pdf.cell(40, 8, date, border=1)
-            pdf.cell(30, 8, f"{hrs:.2f}", border=1, ln=True)
-            total += hrs
+            date_str = (r[3] or '')[:10]  # e.g., "2025-01-15"
+            try:
+                month_key = date_str[:7]  # "2025-01"
+            except Exception:
+                month_key = "Undatiert"
+            months_data[month_key].append(r)
 
-        pdf.ln(6)
+        # Sort months chronologically
+        sorted_months = sorted(months_data.keys(), reverse=True)
+
+        grand_total = 0.0
+
+        # Process each month
+        for month_key in sorted_months:
+            rows_in_month = months_data[month_key]
+            month_total = 0.0
+
+            # Month header
+            pdf.set_font("Arial", "B", 12)
+            pdf.cell(0, 10, f"Monat: {month_key}", ln=True)
+
+            # Table header
+            pdf.set_font("Arial", "B", 10)
+            pdf.cell(100, 7, "Tätigkeit", border=1)
+            pdf.cell(40, 7, "Datum", border=1)
+            pdf.cell(30, 7, "Stunden", border=1, ln=True)
+
+            # Table rows for month
+            pdf.set_font("Arial", size=9)
+            for r in rows_in_month:
+                act = (r[2] or '')[:60]
+                date = (r[3] or '')[:10]
+                hrs = float(r[5] or 0)
+                pdf.cell(100, 7, act, border=1)
+                pdf.cell(40, 7, date, border=1)
+                pdf.cell(30, 7, f"{hrs:.2f}", border=1, ln=True)
+                month_total += hrs
+
+            # Month subtotal
+            pdf.set_font("Arial", "B", 10)
+            pdf.cell(140, 7, f"Monatssumme: {month_total:.2f}", border=1, ln=True)
+            grand_total += month_total
+            pdf.ln(4)
+
+        # Grand total
         pdf.set_font("Arial", "B", 12)
-        pdf.cell(0, 10, f"Gesamtstunden: {total:.2f}", ln=True)
+        pdf.cell(0, 10, f"Gesamtstunden: {grand_total:.2f}", ln=True)
 
         try:
             pdf.output(filename)
