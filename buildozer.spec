@@ -10,7 +10,7 @@ source.include_exts = py,kv,png,jpg,db
 version = 0.1.0
 
 # Runtime requirements
-requirements = python3,kivy,sqlite3
+requirements = python3,kivy,sqlite3,fpdf2
 orientation = portrait
 fullscreen = 0
 
@@ -28,3 +28,4 @@ android.add_src = .
 [buildozer]
 log_level = 2
 warn_on_root = 1
+

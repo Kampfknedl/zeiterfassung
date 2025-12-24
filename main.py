@@ -407,7 +407,7 @@ class RootWidget(BoxLayout):
         self.refresh_entries()
 
     def export_pdf(self):
-        # Export PDF report for selected customer using reportlab if available
+        # Export PDF report for selected customer using pure-Python fpdf2 (Android-friendly)
         selected_customer = self.ids.customer_spinner.text
         if not selected_customer or selected_customer == '—':
             from kivy.uix.popup import Popup
@@ -415,64 +415,75 @@ class RootWidget(BoxLayout):
             Popup(title='Fehler', content=Label(text='Bitte Kunde auswählen'), size_hint=(.6, .3)).open()
             return
         try:
-            from reportlab.lib.pagesizes import A4
-            from reportlab.pdfgen import canvas
+            from fpdf import FPDF
         except Exception as e:
             from kivy.uix.popup import Popup
             from kivy.uix.label import Label
-            Popup(title='Fehler', content=Label(text=f'Reportlab fehlt: {e}'), size_hint=(.8, .3)).open()
+            Popup(title='Fehler', content=Label(text=f'PDF-Bibliothek fehlt: {e}'), size_hint=(.8, .3)).open()
             return
 
-        # Save report into app data dir so it's accessible and persistent
         out_dir = self.get_db_dir()
         os.makedirs(out_dir, exist_ok=True)
         filename = os.path.join(out_dir, f"report_{selected_customer.replace(' ', '_')}.pdf")
-        c = canvas.Canvas(filename, pagesize=A4)
-        c.setTitle(f"Report - {selected_customer}")
-        y = 800
-        c.setFont("Helvetica-Bold", 16)
-        c.drawString(50, y, f"Report für: {selected_customer}")
-        # include customer contact info in header
+
+        pdf = FPDF("P", "mm", "A4")
+        pdf.set_title(f"Report - {selected_customer}")
+        pdf.add_page()
+        pdf.set_auto_page_break(auto=True, margin=15)
+
+        # Header
+        pdf.set_font("Arial", "B", 16)
+        pdf.cell(0, 10, f"Report für: {selected_customer}", ln=True)
+
         cust = db.get_customer(self.get_db_path(), selected_customer)
         addr = cust[2] if cust and cust[2] else ''
         email = cust[3] if cust and cust[3] else ''
         phone = cust[4] if cust and cust[4] else ''
-        y -= 18
+        pdf.set_font("Arial", size=10)
         if addr:
-            c.setFont("Helvetica", 10)
-            c.drawString(50, y, f"Adresse: {addr}")
-            y -= 14
+            pdf.cell(0, 6, f"Adresse: {addr}", ln=True)
         if email:
-            c.drawString(50, y, f"Email: {email}")
-            y -= 14
+            pdf.cell(0, 6, f"Email: {email}", ln=True)
         if phone:
-            c.drawString(50, y, f"Telefon: {phone}")
-            y -= 14
-        y -= 6
+            pdf.cell(0, 6, f"Telefon: {phone}", ln=True)
+        pdf.ln(4)
+
         rows = db.get_entries(self.get_db_path(), selected_customer)
         if not rows:
             from kivy.uix.popup import Popup
             from kivy.uix.label import Label
             Popup(title='Info', content=Label(text='Keine Einträge für den ausgewählten Kunden'), size_hint=(.6, .3)).open()
             return
-        total = 0
-        c.setFont("Helvetica", 10)
-        c.drawString(50, y, "Tätigkeit")
-        c.drawString(250, y, "Datum")
-        c.drawString(380, y, "Std")
-        y -= 15
+
+        # Table header
+        pdf.set_font("Arial", "B", 11)
+        pdf.cell(100, 8, "Tätigkeit", border=1)
+        pdf.cell(40, 8, "Datum", border=1)
+        pdf.cell(30, 8, "Stunden", border=1, ln=True)
+
+        # Table rows
+        total = 0.0
+        pdf.set_font("Arial", size=10)
         for r in rows:
-            c.drawString(50, y, (r[2] or '')[:40])
-            c.drawString(250, y, (r[3] or '')[:10])
-            c.drawString(380, y, f"{r[5]:.2f}")
-            y -= 15
-            total += r[5] or 0
-            if y < 50:
-                c.showPage(); y = 800
-        y -= 20
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(50, y, f"Gesamtstunden: {total:.2f}")
-        c.save()
+            act = (r[2] or '')[:60]
+            date = (r[3] or '')[:10]
+            hrs = float(r[5] or 0)
+            pdf.cell(100, 8, act, border=1)
+            pdf.cell(40, 8, date, border=1)
+            pdf.cell(30, 8, f"{hrs:.2f}", border=1, ln=True)
+            total += hrs
+
+        pdf.ln(6)
+        pdf.set_font("Arial", "B", 12)
+        pdf.cell(0, 10, f"Gesamtstunden: {total:.2f}", ln=True)
+
+        try:
+            pdf.output(filename)
+        except Exception as e:
+            from kivy.uix.popup import Popup
+            from kivy.uix.label import Label
+            Popup(title='Fehler', content=Label(text=f'PDF konnte nicht gespeichert werden: {e}'), size_hint=(.8, .3)).open()
+            return
 
         from kivy.uix.popup import Popup
         from kivy.uix.label import Label
