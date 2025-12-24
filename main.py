@@ -205,6 +205,19 @@ class RootWidget(BoxLayout):
     def get_db_dir(self):
         return os.path.dirname(self.get_db_path())
 
+    def get_downloads_dir(self):
+        # Try Android public Downloads directory; fallback to OS Downloads or app data
+        try:
+            from jnius import autoclass
+            Environment = autoclass('android.os.Environment')
+            downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            return downloads.getAbsolutePath()
+        except Exception:
+            try:
+                return os.path.join(os.path.expanduser('~'), 'Downloads')
+            except Exception:
+                return self.get_db_dir()
+
     def load_customers(self):
         path = self.get_db_path()
         self.customers = db.get_customers(path)
@@ -422,7 +435,7 @@ class RootWidget(BoxLayout):
             Popup(title='Fehler', content=Label(text=f'PDF-Bibliothek fehlt: {e}'), size_hint=(.8, .3)).open()
             return
 
-        out_dir = self.get_db_dir()
+        out_dir = self.get_downloads_dir()
         os.makedirs(out_dir, exist_ok=True)
         filename = os.path.join(out_dir, f"report_{selected_customer.replace(' ', '_')}.pdf")
 
