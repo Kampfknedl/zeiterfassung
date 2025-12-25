@@ -1,4 +1,4 @@
-﻿[app]
+[app]
 title = Zeiterfassung
 package.name = zeiterfassung
 package.domain = org.tkideneb
