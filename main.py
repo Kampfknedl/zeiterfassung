@@ -103,6 +103,11 @@ RootWidget:
                 text: 'Start'
                 on_release: root.start_timer()
             Button:
+                id: pause_btn
+                text: 'Pause'
+                disabled: True
+                on_release: root.pause_timer()
+            Button:
                 id: stop_btn
                 text: 'Stop'
                 on_release: root.stop_timer()
@@ -136,6 +141,8 @@ class RootWidget(BoxLayout):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._timer_start = None
+        self._timer_paused_time = 0  # accumulated paused seconds
+        self._pause_start = None      # when pause was pressed
 
     def on_kv_post(self, base_widget):
         # Ensure DB initialized before attempting queries
@@ -448,18 +455,49 @@ class RootWidget(BoxLayout):
             # already running
             return
         self._timer_start = datetime.datetime.now()
-        # disable start, enable stop
+        self._timer_paused_time = 0
+        self._pause_start = None
+        # disable start, enable pause and stop
         try:
             self.ids.start_btn.disabled = True
+            self.ids.pause_btn.disabled = False
             self.ids.stop_btn.disabled = False
         except Exception:
             pass
+
+    def pause_timer(self):
+        if self._timer_start is None:
+            return
+        if self._pause_start is None:
+            # Start pause
+            self._pause_start = datetime.datetime.now()
+            try:
+                self.ids.pause_btn.text = 'Fortsetzen'
+            except Exception:
+                pass
+        else:
+            # Resume from pause
+            pause_duration = (datetime.datetime.now() - self._pause_start).total_seconds()
+            self._timer_paused_time += pause_duration
+            self._pause_start = None
+            try:
+                self.ids.pause_btn.text = 'Pause'
+            except Exception:
+                pass
 
     def stop_timer(self):
         if self._timer_start is None:
             return
         end = datetime.datetime.now()
-        raw_hours = (end - self._timer_start).total_seconds() / 3600.0
+        
+        # Calculate active time (excluding pauses)
+        total_seconds = (end - self._timer_start).total_seconds()
+        if self._pause_start is not None:
+            # Currently paused - add current pause duration
+            total_seconds -= (end - self._pause_start).total_seconds()
+        total_seconds -= self._timer_paused_time
+        
+        raw_hours = total_seconds / 3600.0
         # round up to nearest 0.25 hours
         import math
         billed = math.ceil(raw_hours / 0.25) * 0.25
@@ -468,8 +506,12 @@ class RootWidget(BoxLayout):
         db.add_entry(path, self.ids.customer_spinner.text, self.ids.activity_input.text or 'Keine Angabe', self._timer_start.isoformat(), end.isoformat(), billed)
         # reset timer and buttons
         self._timer_start = None
+        self._timer_paused_time = 0
+        self._pause_start = None
         try:
             self.ids.start_btn.disabled = False
+            self.ids.pause_btn.disabled = True
+            self.ids.pause_btn.text = 'Pause'
             self.ids.stop_btn.disabled = True
         except Exception:
             pass
