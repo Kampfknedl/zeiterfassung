@@ -581,7 +581,7 @@ class RootWidget(BoxLayout):
         pdf.cell(0, 10, f"Gesamtstunden: {grand_total:.2f}", ln=True)
 
         try:
-            pdf.output(filename, 'F')
+            pdf.output(filename)
         except Exception as e:
             from kivy.uix.popup import Popup
             from kivy.uix.label import Label
