@@ -5,91 +5,107 @@ from kivy.properties import ListProperty, StringProperty
 import os
 import datetime
 import db
+
 KV = '''
 RootWidget:
     orientation: 'vertical'
+    spacing: 4
 
-    # Row 1: customer selection
+    # Row 1: customer selection - responsive
     BoxLayout:
+        orientation: 'vertical'
         size_hint_y: None
-        height: '40dp'
+        height: '140dp'
+        spacing: 4
         Label:
             text: 'Kunde:'
-            size_hint_x: None
-            width: '80dp'
+            size_hint_y: None
+            height: '30dp'
         Spinner:
             id: customer_spinner
             text: root.customers[0] if root.customers else '—'
             values: root.customers
-        Button:
-            text: '+ Kunde'
-            size_hint_x: None
-            width: '80dp'
-            on_release: root.add_customer()
-        Button:
-            text: 'Kunden verwalten'
-            size_hint_x: None
-            width: '140dp'
-            on_release: root.open_customer_management()
+            size_hint_y: None
+            height: '40dp'
+        BoxLayout:
+            size_hint_y: None
+            height: '40dp'
+            spacing: 4
+            Button:
+                text: '+ Kunde'
+                on_release: root.add_customer()
+            Button:
+                text: 'Kunden verwalten'
+                on_release: root.open_customer_management()
 
-    # Row 2: activity, date, hours (manual entry)
+    # Row 2: activity, date, hours - responsive
     BoxLayout:
+        orientation: 'vertical'
         size_hint_y: None
-        height: '40dp'
+        height: '200dp'
+        spacing: 4
         Label:
             text: 'Tätigkeit:'
-            size_hint_x: None
-            width: '80dp'
+            size_hint_y: None
+            height: '30dp'
         TextInput:
             id: activity_input
             multiline: False
-        Label:
-            text: 'Datum:'
-            size_hint_x: None
-            width: '60dp'
-        TextInput:
-            id: date_input
-            text: ''
-            hint_text: 'dd.mm.yyyy'
-            multiline: False
-            size_hint_x: None
-            width: '120dp'
-        Label:
-            text: 'Std:'
-            size_hint_x: None
-            width: '40dp'
-        TextInput:
-            id: hours_input
-            text: '1.0'
-            input_filter: 'float'
-            multiline: False
-        Button:
-            text: 'Eintrag'
-            size_hint_x: None
-            width: '80dp'
-            on_release: root.add_entry(activity_input.text, hours_input.text)
+            size_hint_y: None
+            height: '40dp'
+        BoxLayout:
+            size_hint_y: None
+            height: '40dp'
+            spacing: 4
+            Label:
+                text: 'Datum:'
+                size_hint_x: None
+                width: '60dp'
+            TextInput:
+                id: date_input
+                text: ''
+                hint_text: 'dd.mm.yyyy'
+                multiline: False
+        BoxLayout:
+            size_hint_y: None
+            height: '40dp'
+            spacing: 4
+            Label:
+                text: 'Std:'
+                size_hint_x: None
+                width: '40dp'
+            TextInput:
+                id: hours_input
+                text: '1.0'
+                input_filter: 'float'
+                multiline: False
+            Button:
+                text: 'Eintrag'
+                on_release: root.add_entry(activity_input.text, hours_input.text)
 
     # Row 3: actions
     BoxLayout:
+        orientation: 'vertical'
         size_hint_y: None
-        height: '40dp'
+        height: '120dp'
+        spacing: 4
         Button:
             text: 'Report (PDF)'
-            size_hint_x: None
-            width: '120dp'
+            size_hint_y: None
+            height: '40dp'
             on_release: root.export_pdf()
-        Button:
-            id: start_btn
-            text: 'Start'
-            size_hint_x: None
-            width: '80dp'
-            on_release: root.start_timer()
-        Button:
-            id: stop_btn
-            text: 'Stop'
-            size_hint_x: None
-            width: '80dp'
-            on_release: root.stop_timer()
+        BoxLayout:
+            size_hint_y: None
+            height: '40dp'
+            spacing: 4
+            Button:
+                id: start_btn
+                text: 'Start'
+                on_release: root.start_timer()
+            Button:
+                id: stop_btn
+                text: 'Stop'
+                on_release: root.stop_timer()
 
     Label:
         text: 'Letzte Einträge:'
@@ -104,6 +120,13 @@ RootWidget:
             size_hint_y: None
             height: self.minimum_height
             spacing: 4
+
+    Label:
+        text: 'made by Benedikt Bernhart'
+        size_hint_y: None
+        height: '20dp'
+        font_size: '10sp'
+        color: 0.5, 0.5, 0.5, 1
 '''
 
 
