@@ -504,15 +504,15 @@ class RootWidget(BoxLayout):
         pdf.add_page()
         pdf.set_auto_page_break(auto=True, margin=15)
 
-        # Header
-        pdf.set_font("Arial", "B", 16)
-        pdf.cell(0, 10, f"Report für: {selected_customer}", ln=True)
+        # Header - use built-in font that works on Android
+        pdf.set_font("Helvetica", "B", 16)
+        pdf.cell(0, 10, f"Report fuer: {selected_customer}", ln=True)
 
         cust = db.get_customer(self.get_db_path(), selected_customer)
         addr = cust[2] if cust and cust[2] else ''
         email = cust[3] if cust and cust[3] else ''
         phone = cust[4] if cust and cust[4] else ''
-        pdf.set_font("Arial", size=10)
+        pdf.set_font("Helvetica", size=10)
         if addr:
             pdf.cell(0, 6, f"Adresse: {addr}", ln=True)
         if email:
@@ -550,17 +550,17 @@ class RootWidget(BoxLayout):
             month_total = 0.0
 
             # Month header
-            pdf.set_font("Arial", "B", 12)
+            pdf.set_font("Helvetica", "B", 12)
             pdf.cell(0, 10, f"Monat: {month_key}", ln=True)
 
             # Table header
-            pdf.set_font("Arial", "B", 10)
+            pdf.set_font("Helvetica", "B", 10)
             pdf.cell(100, 7, "Tätigkeit", border=1)
             pdf.cell(40, 7, "Datum", border=1)
             pdf.cell(30, 7, "Stunden", border=1, ln=True)
 
             # Table rows for month
-            pdf.set_font("Arial", size=9)
+            pdf.set_font("Helvetica", size=9)
             for r in rows_in_month:
                 act = (r[2] or '')[:60]
                 date = (r[3] or '')[:10]
@@ -571,17 +571,17 @@ class RootWidget(BoxLayout):
                 month_total += hrs
 
             # Month subtotal
-            pdf.set_font("Arial", "B", 10)
+            pdf.set_font("Helvetica", "B", 10)
             pdf.cell(140, 7, f"Monatssumme: {month_total:.2f}", border=1, ln=True)
             grand_total += month_total
             pdf.ln(4)
 
         # Grand total
-        pdf.set_font("Arial", "B", 12)
+        pdf.set_font("Helvetica", "B", 12)
         pdf.cell(0, 10, f"Gesamtstunden: {grand_total:.2f}", ln=True)
 
         try:
-            pdf.output(filename)
+            pdf.output(filename, 'F')
         except Exception as e:
             from kivy.uix.popup import Popup
             from kivy.uix.label import Label
