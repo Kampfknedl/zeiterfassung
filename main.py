@@ -500,116 +500,111 @@ class RootWidget(BoxLayout):
             os.makedirs(out_dir, exist_ok=True)
             filename = os.path.join(out_dir, f"report_{selected_customer.replace(' ', '_')}.pdf")
 
-        pdf = FPDF("P", "mm", "A4")
-        pdf.set_title(f"Report - {selected_customer}")
-        pdf.add_page()
-        pdf.set_auto_page_break(auto=True, margin=15)
+            pdf = FPDF("P", "mm", "A4")
+            pdf.set_title(f"Report - {selected_customer}")
+            pdf.add_page()
+            pdf.set_auto_page_break(auto=True, margin=15)
 
-        # Header - use built-in font that works on Android
-        pdf.set_font("Helvetica", "B", 16)
-        pdf.cell(0, 10, f"Report fuer: {selected_customer}", ln=True)
+            # Header - use built-in font that works on Android
+            pdf.set_font("Helvetica", "B", 16)
+            pdf.cell(0, 10, f"Report fuer: {selected_customer}", ln=True)
 
-        cust = db.get_customer(self.get_db_path(), selected_customer)
-        addr = cust[2] if cust and cust[2] else ''
-        email = cust[3] if cust and cust[3] else ''
-        phone = cust[4] if cust and cust[4] else ''
-        pdf.set_font("Helvetica", size=10)
-        if addr:
-            pdf.cell(0, 6, f"Adresse: {addr}", ln=True)
-        if email:
-            pdf.cell(0, 6, f"Email: {email}", ln=True)
-        if phone:
-            pdf.cell(0, 6, f"Telefon: {phone}", ln=True)
-        pdf.ln(4)
-
-        rows = db.get_entries(self.get_db_path(), selected_customer)
-        if not rows:
-            from kivy.uix.popup import Popup
-            from kivy.uix.label import Label
-            Popup(title='Info', content=Label(text='Keine Einträge für den ausgewählten Kunden'), size_hint=(.6, .3)).open()
-            return
-
-        # Group entries by month (YYYY-MM)
-        from collections import defaultdict
-        months_data = defaultdict(list)
-        for r in rows:
-            date_str = (r[3] or '')[:10]  # e.g., "2025-01-15"
-            try:
-                month_key = date_str[:7]  # "2025-01"
-            except Exception:
-                month_key = "Undatiert"
-            months_data[month_key].append(r)
-
-        # Sort months chronologically
-        sorted_months = sorted(months_data.keys(), reverse=True)
-
-        grand_total = 0.0
-
-        # Process each month
-        for month_key in sorted_months:
-            rows_in_month = months_data[month_key]
-            month_total = 0.0
-
-            # Month header
-            pdf.set_font("Helvetica", "B", 12)
-            pdf.cell(0, 10, f"Monat: {month_key}", ln=True)
-
-            # Table header
-            pdf.set_font("Helvetica", "B", 10)
-            pdf.cell(100, 7, "Tätigkeit", border=1)
-            pdf.cell(40, 7, "Datum", border=1)
-            pdf.cell(30, 7, "Stunden", border=1, ln=True)
-
-            # Table rows for month
-            pdf.set_font("Helvetica", size=9)
-            for r in rows_in_month:
-                act = (r[2] or '')[:60]
-                date = (r[3] or '')[:10]
-                hrs = float(r[5] or 0)
-                pdf.cell(100, 7, act, border=1)
-                pdf.cell(40, 7, date, border=1)
-                pdf.cell(30, 7, f"{hrs:.2f}", border=1, ln=True)
-                month_total += hrs
-
-            # Month subtotal
-            pdf.set_font("Helvetica", "B", 10)
-            pdf.cell(140, 7, f"Monatssumme: {month_total:.2f}", border=1, ln=True)
-            grand_total += month_total
+            cust = db.get_customer(self.get_db_path(), selected_customer)
+            addr = cust[2] if cust and cust[2] else ''
+            email = cust[3] if cust and cust[3] else ''
+            phone = cust[4] if cust and cust[4] else ''
+            pdf.set_font("Helvetica", size=10)
+            if addr:
+                pdf.cell(0, 6, f"Adresse: {addr}", ln=True)
+            if email:
+                pdf.cell(0, 6, f"Email: {email}", ln=True)
+            if phone:
+                pdf.cell(0, 6, f"Telefon: {phone}", ln=True)
             pdf.ln(4)
 
-        # Grand total
-        pdf.set_font("Helvetica", "B", 12)
-        pdf.cell(0, 10, f"Gesamtstunden: {grand_total:.2f}", ln=True)
+            rows = db.get_entries(self.get_db_path(), selected_customer)
+            if not rows:
+                from kivy.uix.popup import Popup
+                from kivy.uix.label import Label
+                Popup(title='Info', content=Label(text='Keine Einträge für den ausgewählten Kunden'), size_hint=(.6, .3)).open()
+                return
 
-        try:
+            # Group entries by month (YYYY-MM)
+            from collections import defaultdict
+            months_data = defaultdict(list)
+            for r in rows:
+                date_str = (r[3] or '')[:10]  # e.g., "2025-01-15"
+                try:
+                    month_key = date_str[:7]  # "2025-01"
+                except Exception:
+                    month_key = "Undatiert"
+                months_data[month_key].append(r)
+
+            # Sort months chronologically
+            sorted_months = sorted(months_data.keys(), reverse=True)
+
+            grand_total = 0.0
+
+            # Process each month
+            for month_key in sorted_months:
+                rows_in_month = months_data[month_key]
+                month_total = 0.0
+
+                # Month header
+                pdf.set_font("Helvetica", "B", 12)
+                pdf.cell(0, 10, f"Monat: {month_key}", ln=True)
+
+                # Table header
+                pdf.set_font("Helvetica", "B", 10)
+                pdf.cell(100, 7, "Tätigkeit", border=1)
+                pdf.cell(40, 7, "Datum", border=1)
+                pdf.cell(30, 7, "Stunden", border=1, ln=True)
+
+                # Table rows for month
+                pdf.set_font("Helvetica", size=9)
+                for r in rows_in_month:
+                    act = (r[2] or '')[:60]
+                    date = (r[3] or '')[:10]
+                    hrs = float(r[5] or 0)
+                    pdf.cell(100, 7, act, border=1)
+                    pdf.cell(40, 7, date, border=1)
+                    pdf.cell(30, 7, f"{hrs:.2f}", border=1, ln=True)
+                    month_total += hrs
+
+                # Month subtotal
+                pdf.set_font("Helvetica", "B", 10)
+                pdf.cell(140, 7, f"Monatssumme: {month_total:.2f}", border=1, ln=True)
+                grand_total += month_total
+                pdf.ln(4)
+
+            # Grand total
+            pdf.set_font("Helvetica", "B", 12)
+            pdf.cell(0, 10, f"Gesamtstunden: {grand_total:.2f}", ln=True)
+
             pdf.output(filename)
-        except Exception as e:
+
+            # Show success popup with share button
             from kivy.uix.popup import Popup
             from kivy.uix.label import Label
-            Popup(title='Fehler', content=Label(text=f'PDF konnte nicht gespeichert werden: {e}'), size_hint=(.8, .3)).open()
-            return
+            from kivy.uix.button import Button
+            content = BoxLayout(orientation='vertical', spacing=8)
+            content.add_widget(Label(text=f'Report erstellt:', size_hint_y=None, height='30dp'))
+            content.add_widget(Label(text=filename, size_hint_y=None, height='40dp'))
+            btn_box = BoxLayout(size_hint_y=None, height='40dp', spacing=8)
+            share_btn = Button(text='Teilen')
+            close_btn = Button(text='OK')
+            btn_box.add_widget(share_btn)
+            btn_box.add_widget(close_btn)
+            content.add_widget(btn_box)
+            popup = Popup(title='Erfolg', content=content, size_hint=(.85, .35))
 
-        from kivy.uix.popup import Popup
-        from kivy.uix.label import Label
-        # Show success popup with share button
-        content = BoxLayout(orientation='vertical', spacing=8)
-        content.add_widget(Label(text=f'Report erstellt:', size_hint_y=None, height='30dp'))
-        content.add_widget(Label(text=filename, size_hint_y=None, height='40dp'))
-        btn_box = BoxLayout(size_hint_y=None, height='40dp', spacing=8)
-        share_btn = Button(text='Teilen')
-        close_btn = Button(text='OK')
-        btn_box.add_widget(share_btn)
-        btn_box.add_widget(close_btn)
-        content.add_widget(btn_box)
-        popup = Popup(title='Erfolg', content=content, size_hint=(.85, .35))
+            def do_share(*a):
+                self.share_pdf(filename)
+                popup.dismiss()
 
-        def do_share(*a):
-            self.share_pdf(filename)
-            popup.dismiss()
-
-        share_btn.bind(on_release=do_share)
-        close_btn.bind(on_release=popup.dismiss)
-        popup.open()
+            share_btn.bind(on_release=do_share)
+            close_btn.bind(on_release=popup.dismiss)
+            popup.open()
 
         except Exception as e:
             from kivy.uix.popup import Popup
