@@ -8,7 +8,7 @@ source.include_exts = py,png,jpg,kv,atlas,db
 
 version = 1.0
 
-requirements = python3,kivy,fpdf2
+requirements = python3,kivy,fpdf2,fonttools,pillow,defusedxml
 
 icon.filename = ./icon.png
 
