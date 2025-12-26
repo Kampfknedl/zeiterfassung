@@ -10,6 +10,8 @@ version = 1.0
 
 requirements = python3,kivy
 
+icon.filename = ./icon.png
+
 android.permissions = WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,MANAGE_EXTERNAL_STORAGE
 android.api = 31
 android.minapi = 21
