@@ -495,9 +495,10 @@ class RootWidget(BoxLayout):
             Popup(title='Fehler', content=Label(text=f'PDF-Bibliothek fehlt: {e}'), size_hint=(.8, .3)).open()
             return
 
-        out_dir = self.get_downloads_dir()
-        os.makedirs(out_dir, exist_ok=True)
-        filename = os.path.join(out_dir, f"report_{selected_customer.replace(' ', '_')}.pdf")
+        try:
+            out_dir = self.get_downloads_dir()
+            os.makedirs(out_dir, exist_ok=True)
+            filename = os.path.join(out_dir, f"report_{selected_customer.replace(' ', '_')}.pdf")
 
         pdf = FPDF("P", "mm", "A4")
         pdf.set_title(f"Report - {selected_customer}")
@@ -609,6 +610,13 @@ class RootWidget(BoxLayout):
         share_btn.bind(on_release=do_share)
         close_btn.bind(on_release=popup.dismiss)
         popup.open()
+
+        except Exception as e:
+            from kivy.uix.popup import Popup
+            from kivy.uix.label import Label
+            import traceback
+            error_msg = f"Fehler beim PDF-Export:\n{str(e)}\n\n{traceback.format_exc()}"
+            Popup(title='PDF-Fehler', content=Label(text=error_msg[:500]), size_hint=(.9, .6)).open()
 
     def refresh_entries(self):
         # ensure UI has been built and ids available
