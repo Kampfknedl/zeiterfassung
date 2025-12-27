@@ -4,7 +4,7 @@ package.name = zeiterfassung
 package.domain = org.tkideneb
 
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas,db,xml
+source.include_exts = py,png,jpg,kv,atlas,db
 
 version = 1.0
 
@@ -12,15 +12,11 @@ requirements = python3,kivy,fpdf2
 
 icon.filename = ./icon.png
 
-android.add_res_dirs = res
-android.resource_dirs = res
-
 android.permissions = WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
 android.api = 31
 android.minapi = 21
 android.archs = arm64-v8a
 android.accept_sdk_license = True
-android.meta_data = android.support.FILE_PROVIDER_PATHS=@xml/fileprovider_paths
 android.ndk = 25b
 orientation = portrait
 
