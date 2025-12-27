@@ -8,14 +8,14 @@ source.include_exts = py,png,jpg,kv,atlas,db,xml
 
 version = 1.0
 
-requirements = python3,kivy,fpdf2,fonttools,pillow,defusedxml
+requirements = python3,kivy,fpdf2
 
 icon.filename = ./icon.png
 
 android.add_res_dirs = res
 android.resource_dirs = res
 
-android.permissions = WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,MANAGE_EXTERNAL_STORAGE
+android.permissions = WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
 android.api = 31
 android.minapi = 21
 android.archs = arm64-v8a
