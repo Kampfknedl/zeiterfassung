@@ -1,4 +1,4 @@
-[app]
+﻿[app]
 title = Zeiterfassung
 package.name = zeiterfassung
 package.domain = org.tkideneb
@@ -18,7 +18,12 @@ android.minapi = 21
 android.archs = arm64-v8a
 android.accept_sdk_license = True
 android.ndk = 25b
+android.skip_update = False
 orientation = portrait
+
+p4a.bootstrap = sdl2
+p4a.arch = arm64-v8a
+p4a.ndk_api = 21
 
 [buildozer]
 log_level = 2
