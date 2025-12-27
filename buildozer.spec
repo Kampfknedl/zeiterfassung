@@ -19,7 +19,7 @@ android.api = 31
 android.minapi = 21
 android.archs = arm64-v8a
 android.accept_sdk_license = True
-android.meta_data = androidx.core.content.FileProvider.DIRECTORIES=@xml/fileprovider_paths
+android.meta_data = androidx.core.FILE_PROVIDER_PATHS=@xml/fileprovider_paths
 orientation = portrait
 
 [buildozer]
