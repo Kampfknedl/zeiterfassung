@@ -235,6 +235,19 @@ class RootWidget(BoxLayout):
     def get_db_dir(self):
         return os.path.dirname(self.get_db_path())
 
+    def get_documents_dir(self):
+        # Prefer Android public Documents; fallback to OS Documents or app data
+        try:
+            from jnius import autoclass
+            Environment = autoclass('android.os.Environment')
+            docs = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
+            return docs.getAbsolutePath()
+        except Exception:
+            try:
+                return os.path.join(os.path.expanduser('~'), 'Documents')
+            except Exception:
+                return self.get_db_dir()
+
     def get_downloads_dir(self):
         # Try Android public Downloads directory; fallback to OS Downloads or app data
         try:
@@ -538,7 +551,7 @@ class RootWidget(BoxLayout):
             return
 
         try:
-            out_dir = self.get_downloads_dir()
+            out_dir = self.get_documents_dir()
             os.makedirs(out_dir, exist_ok=True)
             filename = os.path.join(out_dir, f"report_{selected_customer.replace(' ', '_')}.pdf")
 
