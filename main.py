@@ -263,24 +263,30 @@ class RootWidget(BoxLayout):
 
     def share_pdf(self, filepath):
         # Open Android share intent for the PDF file
+        if not os.path.exists(filepath):
+            from kivy.uix.popup import Popup
+            from kivy.uix.label import Label
+            Popup(title='Fehler', content=Label(text=f'Datei nicht gefunden: {filepath}'), size_hint=(.8, .3)).open()
+            return
+            
         try:
             from jnius import autoclass, cast
             PythonJavaClass = autoclass('org.kivy.android.PythonActivity')
             Intent = autoclass('android.content.Intent')
             Uri = autoclass('android.net.Uri')
             File = autoclass('java.io.File')
-            FileProvider = autoclass('androidx.core.content.FileProvider')
-
-            # Create file object
-            java_file = File(filepath)
             
-            # Try FileProvider for secure sharing (Android 7+)
+            # Try to use FileProvider for secure sharing (Android 7+)
             try:
+                FileProvider = autoclass('androidx.core.content.FileProvider')
                 context = PythonJavaClass.mActivity
                 authority = f"{context.getPackageName()}.fileprovider"
+                java_file = File(filepath)
                 file_uri = FileProvider.getUriForFile(context, authority, java_file)
-            except Exception:
-                # Fallback to direct file:// URI
+            except Exception as e:
+                # Fallback to direct file:// URI for older Android or if FileProvider fails
+                print(f"FileProvider failed ({e}), using direct URI")
+                java_file = File(filepath)
                 file_uri = Uri.fromFile(java_file)
 
             # Create share intent
@@ -290,13 +296,16 @@ class RootWidget(BoxLayout):
             intent.setType("application/pdf")
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
 
-            # Start share intent chooser
+            # Start share intent chooser (shows WhatsApp, Email, etc.)
             chooser = Intent.createChooser(intent, "Report teilen über...")
             PythonJavaClass.mActivity.startActivity(chooser)
         except Exception as e:
             from kivy.uix.popup import Popup
             from kivy.uix.label import Label
-            Popup(title='Fehler', content=Label(text=f'Fehler beim Teilen: {e}'), size_hint=(.8, .3)).open()
+            import traceback
+            error_msg = f"Fehler beim Teilen: {str(e)}"
+            Popup(title='Fehler', content=Label(text=error_msg), size_hint=(.8, .4)).open()
+            print(f"Share error: {traceback.format_exc()}")
 
     def load_customers(self):
         path = self.get_db_path()

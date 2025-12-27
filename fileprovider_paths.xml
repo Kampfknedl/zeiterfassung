@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Allow sharing of files in external storage public Documents directory -->
+    <external-path name="documents" path="Documents/" />
+    <!-- Allow sharing of files in external storage public Downloads directory -->
+    <external-path name="downloads" path="Download/" />
+    <!-- Allow sharing of files from app's external files directory -->
+    <external-files-path name="external_files" path="." />
+</paths>
