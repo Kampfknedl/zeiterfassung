@@ -8,7 +8,7 @@ source.include_exts = py,png,jpg,kv,atlas,db,xml
 
 version = 1.0
 
-requirements = python3,kivy,fpdf2,fonttools==4.38.0,pillow,defusedxml
+requirements = python3,kivy,fpdf2,fonttools,pillow,defusedxml
 
 icon.filename = ./icon.png
 
@@ -21,6 +21,7 @@ android.minapi = 21
 android.archs = arm64-v8a
 android.accept_sdk_license = True
 android.meta_data = android.support.FILE_PROVIDER_PATHS=@xml/fileprovider_paths
+android.ndk = 25b
 orientation = portrait
 
 [buildozer]
