@@ -571,12 +571,14 @@ class RootWidget(BoxLayout):
 
             # Header - use built-in font that works on Android
             pdf.set_font("Helvetica", "B", 16)
-            pdf.cell(0, 10, f"Report fuer: {selected_customer}", ln=True)
+            # Encode strings to latin-1 safe characters
+            safe_customer = selected_customer.encode('latin-1', 'replace').decode('latin-1')
+            pdf.cell(0, 10, f"Report fuer: {safe_customer}", ln=True)
 
             cust = db.get_customer(self.get_db_path(), selected_customer)
-            addr = cust[2] if cust and cust[2] else ''
-            email = cust[3] if cust and cust[3] else ''
-            phone = cust[4] if cust and cust[4] else ''
+            addr = (cust[2] if cust and cust[2] else '').encode('latin-1', 'replace').decode('latin-1')
+            email = (cust[3] if cust and cust[3] else '').encode('latin-1', 'replace').decode('latin-1')
+            phone = (cust[4] if cust and cust[4] else '').encode('latin-1', 'replace').decode('latin-1')
             pdf.set_font("Helvetica", size=10)
             if addr:
                 pdf.cell(0, 6, f"Adresse: {addr}", ln=True)
@@ -627,7 +629,8 @@ class RootWidget(BoxLayout):
                 # Table rows for month
                 pdf.set_font("Helvetica", size=9)
                 for r in rows_in_month:
-                    act = (r[2] or '')[:60]
+                    # Safely encode all text to latin-1
+                    act = (r[2] or '')[:60].encode('latin-1', 'replace').decode('latin-1')
                     date = (r[3] or '')[:10]
                     hrs = float(r[5] or 0)
                     pdf.cell(100, 7, act, border=1)
