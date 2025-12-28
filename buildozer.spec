@@ -1,4 +1,4 @@
-﻿[app]
+[app]
 title = Zeiterfassung
 package.name = zeiterfassung
 package.domain = org.tkideneb
@@ -28,3 +28,8 @@ p4a.ndk_api = 21
 [buildozer]
 log_level = 2
 warn_on_root = 0
+
+# Android FileProvider configuration for sharing PDFs
+android.add_resources = res
+android.gradle_dependencies = androidx.core:core:1.9.0
+android.meta_data = androidx.core.content.FileProvider=@xml/fileprovider_paths
