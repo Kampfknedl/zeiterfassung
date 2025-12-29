@@ -174,6 +174,51 @@ class RootWidget(BoxLayout):
         except Exception:
             pass
 
+    def show_error(self, title, message):
+        # Show a scrollable error popup and also write a log file for easier sharing
+        try:
+            from kivy.uix.popup import Popup
+            from kivy.uix.boxlayout import BoxLayout
+            from kivy.uix.scrollview import ScrollView
+            from kivy.uix.label import Label
+            from kivy.uix.button import Button
+            root = BoxLayout(orientation='vertical', spacing=8)
+            sv = ScrollView(size_hint=(1, 1))
+            lbl = Label(text=message, size_hint_y=None)
+            # enable wrapping
+            lbl.bind(width=lambda inst, w: setattr(inst, 'text_size', (w, None)))
+            # estimate height based on content length
+            lbl.bind(texture_size=lambda inst, ts: setattr(inst, 'height', ts[1] + 20))
+            sv.add_widget(lbl)
+            root.add_widget(sv)
+            btn = Button(text='OK', size_hint_y=None, height='40dp')
+            root.add_widget(btn)
+            popup = Popup(title=title, content=root, size_hint=(.9, .7))
+            btn.bind(on_release=popup.dismiss)
+            popup.open()
+        except Exception:
+            # As a last resort, try a minimal popup
+            try:
+                from kivy.uix.popup import Popup
+                from kivy.uix.label import Label
+                Popup(title=title, content=Label(text=message[:500]), size_hint=(.9, .6)).open()
+            except Exception:
+                pass
+
+    def write_error_log(self, text):
+        try:
+            out_dir = self.get_documents_dir()
+            os.makedirs(out_dir, exist_ok=True)
+            p = os.path.join(out_dir, 'zeiterfassung_error.log')
+            with open(p, 'a', encoding='utf-8') as f:
+                f.write('\n=== ERROR ===\n')
+                f.write(datetime.datetime.now().isoformat() + '\n')
+                f.write(text)
+                f.write('\n')
+            return p
+        except Exception:
+            return None
+
     def on_customer_changed(self, instance, value):
         """Called when customer spinner selection changes - refresh entries list"""
         self.refresh_entries()
@@ -273,9 +318,7 @@ class RootWidget(BoxLayout):
     def share_pdf(self, filepath):
         # Open Android share intent for the PDF file
         if not os.path.exists(filepath):
-            from kivy.uix.popup import Popup
-            from kivy.uix.label import Label
-            Popup(title='Fehler', content=Label(text=f'Datei nicht gefunden: {filepath}'), size_hint=(.8, .3)).open()
+            self.show_error('Fehler', f'Datei nicht gefunden: {filepath}')
             return
             
         try:
@@ -309,12 +352,11 @@ class RootWidget(BoxLayout):
             chooser = Intent.createChooser(intent, "Report teilen über...")
             PythonJavaClass.mActivity.startActivity(chooser)
         except Exception as e:
-            from kivy.uix.popup import Popup
-            from kivy.uix.label import Label
             import traceback
-            error_msg = f"Fehler beim Teilen: {str(e)}"
-            Popup(title='Fehler', content=Label(text=error_msg), size_hint=(.8, .4)).open()
-            print(f"Share error: {traceback.format_exc()}")
+            tb = traceback.format_exc()
+            error_msg = f"Fehler beim Teilen: {str(e)}\n\n{tb}"
+            self.show_error('Fehler', error_msg)
+            self.write_error_log(error_msg)
 
     def load_customers(self):
         path = self.get_db_path()
@@ -556,16 +598,19 @@ class RootWidget(BoxLayout):
         # Export PDF report for selected customer using pure-Python fpdf2 (Android-friendly)
         selected_customer = self.ids.customer_spinner.text
         if not selected_customer or selected_customer == '—':
-            from kivy.uix.popup import Popup
-            from kivy.uix.label import Label
-            Popup(title='Fehler', content=Label(text='Bitte Kunde auswählen'), size_hint=(.6, .3)).open()
+            self.show_error('Fehler', 'Bitte Kunde auswählen')
             return
         try:
             from fpdf import FPDF
         except Exception as e:
-            from kivy.uix.popup import Popup
-            from kivy.uix.label import Label
-            Popup(title='Fehler', content=Label(text=f'PDF-Bibliothek fehlt: {e}'), size_hint=(.8, .3)).open()
+            self.show_error('PDF-Fehler', f'PDF-Bibliothek fehlt: {e}')
+            return
+
+        # Proactively check fontTools availability as fpdf2 may require it on some paths
+        try:
+            import fontTools  # type: ignore
+        except Exception as e:
+            self.show_error('PDF-Fehler', f"fontTools konnte nicht geladen werden: {e}\nBitte App neu installieren, neue APK verwenden, oder Internetverbindung beim ersten Start sicherstellen.")
             return
 
         try:
@@ -683,11 +728,10 @@ class RootWidget(BoxLayout):
             popup.open()
 
         except Exception as e:
-            from kivy.uix.popup import Popup
-            from kivy.uix.label import Label
             import traceback
             error_msg = f"Fehler beim PDF-Export:\n{str(e)}\n\n{traceback.format_exc()}"
-            Popup(title='PDF-Fehler', content=Label(text=error_msg[:500]), size_hint=(.9, .6)).open()
+            self.show_error('PDF-Fehler', error_msg)
+            self.write_error_log(error_msg)
 
     def refresh_entries(self):
         # ensure UI has been built and ids available
