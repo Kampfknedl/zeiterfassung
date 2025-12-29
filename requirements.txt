@@ -1,5 +1,5 @@
 kivy
 fpdf2
-fontTools
+fonttools
 pillow
 pyjnius
