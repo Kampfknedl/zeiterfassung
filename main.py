@@ -90,10 +90,10 @@ RootWidget:
         height: '120dp'
         spacing: 4
         Button:
-            text: 'Report (PDF)'
+            text: 'Report (CSV)'
             size_hint_y: None
             height: '40dp'
-            on_release: root.export_pdf()
+            on_release: root.export_csv()
         BoxLayout:
             size_hint_y: None
             height: '40dp'
@@ -594,48 +594,18 @@ class RootWidget(BoxLayout):
         Popup(title='Erfasst', content=Label(text=f'Erfasst: {billed:.2f} Std (aufgerundet)'), size_hint=(.7, .3)).open()
         self.refresh_entries()
 
-    def export_pdf(self):
-        # Export PDF report using reportlab (Android-friendly, pure Python)
+    def export_csv(self):
+        # Export CSV report for selected customer - pure Python, no dependencies
         selected_customer = self.ids.customer_spinner.text
         if not selected_customer or selected_customer == '—':
             self.show_error('Fehler', 'Bitte Kunde auswählen')
             return
-        try:
-            from reportlab.lib.pagesizes import A4
-            from reportlab.lib.units import mm
-            from reportlab.pdfgen import canvas
-        except Exception as e:
-            self.show_error('PDF-Fehler', f'PDF-Bibliothek fehlt: {e}')
-            return
 
         try:
+            import csv
             out_dir = self.get_documents_dir()
             os.makedirs(out_dir, exist_ok=True)
-            filename = os.path.join(out_dir, f"report_{selected_customer.replace(' ', '_')}.pdf")
-
-            # Create PDF
-            c = canvas.Canvas(filename, pagesize=A4)
-            width, height = A4
-            y = height - 20 * mm
-
-            # Title
-            c.setFont("Helvetica-Bold", 16)
-            c.drawString(20 * mm, y, f"Report fuer: {selected_customer}")
-            y -= 10 * mm
-
-            # Customer details
-            cust = db.get_customer(self.get_db_path(), selected_customer)
-            c.setFont("Helvetica", 10)
-            if cust and cust[2]:
-                c.drawString(20 * mm, y, f"Adresse: {cust[2]}")
-                y -= 5 * mm
-            if cust and cust[3]:
-                c.drawString(20 * mm, y, f"Email: {cust[3]}")
-                y -= 5 * mm
-            if cust and cust[4]:
-                c.drawString(20 * mm, y, f"Telefon: {cust[4]}")
-                y -= 5 * mm
-            y -= 5 * mm
+            filename = os.path.join(out_dir, f"report_{selected_customer.replace(' ', '_')}.csv")
 
             rows = db.get_entries(self.get_db_path(), selected_customer)
             if not rows:
@@ -656,62 +626,74 @@ class RootWidget(BoxLayout):
                 months_data[month_key].append(r)
 
             sorted_months = sorted(months_data.keys(), reverse=True)
-            grand_total = 0.0
 
-            # Process each month
-            for month_key in sorted_months:
-                rows_in_month = months_data[month_key]
-                month_total = 0.0
-
-                # Check if we need a new page
-                if y < 50 * mm:
-                    c.showPage()
-                    y = height - 20 * mm
-
-                # Month header
-                c.setFont("Helvetica-Bold", 12)
-                c.drawString(20 * mm, y, f"Monat: {month_key}")
-                y -= 8 * mm
-
-                # Table header
-                c.setFont("Helvetica-Bold", 10)
-                c.drawString(20 * mm, y, "Tätigkeit")
-                c.drawString(100 * mm, y, "Datum")
-                c.drawString(140 * mm, y, "Stunden")
-                y -= 6 * mm
-                c.line(20 * mm, y, 180 * mm, y)
-                y -= 2 * mm
-
-                # Table rows
-                c.setFont("Helvetica", 9)
-                for r in rows_in_month:
-                    if y < 20 * mm:
-                        c.showPage()
-                        y = height - 20 * mm
-                        c.setFont("Helvetica", 9)
+            # Write CSV
+            with open(filename, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f, delimiter=';')
+                
+                # Header
+                cust = db.get_customer(self.get_db_path(), selected_customer)
+                writer.writerow(['Report für:', selected_customer])
+                if cust and cust[2]:
+                    writer.writerow(['Adresse:', cust[2]])
+                if cust and cust[3]:
+                    writer.writerow(['Email:', cust[3]])
+                if cust and cust[4]:
+                    writer.writerow(['Telefon:', cust[4]])
+                writer.writerow([])  # blank line
+                
+                grand_total = 0.0
+                
+                # Process each month
+                for month_key in sorted_months:
+                    rows_in_month = months_data[month_key]
+                    month_total = 0.0
                     
-                    act = (r[2] or '')[:50]
-                    date = (r[3] or '')[:10]
-                    hrs = float(r[5] or 0)
-                    c.drawString(20 * mm, y, act)
-                    c.drawString(100 * mm, y, date)
-                    c.drawString(140 * mm, y, f"{hrs:.2f}")
-                    y -= 6 * mm
-                    month_total += hrs
+                    writer.writerow([f'Monat: {month_key}'])
+                    writer.writerow(['Tätigkeit', 'Datum', 'Stunden'])
+                    
+                    for r in rows_in_month:
+                        act = (r[2] or '')[:50]
+                        date = (r[3] or '')[:10]
+                        hrs = float(r[5] or 0)
+                        writer.writerow([act, date, f'{hrs:.2f}'])
+                        month_total += hrs
+                    
+                    writer.writerow([f'Monatssumme:', '', f'{month_total:.2f}'])
+                    writer.writerow([])  # blank line
+                    grand_total += month_total
+                
+                # Grand total
+                writer.writerow(['Gesamtstunden:', '', f'{grand_total:.2f}'])
 
-                # Month subtotal
-                y -= 3 * mm
-                c.setFont("Helvetica-Bold", 10)
-                c.drawString(20 * mm, y, f"Monatssumme: {month_total:.2f}")
-                y -= 8 * mm
-                grand_total += month_total
+            # Show success popup with share button
+            from kivy.uix.popup import Popup
+            from kivy.uix.label import Label
+            from kivy.uix.button import Button
+            content = BoxLayout(orientation='vertical', spacing=8)
+            content.add_widget(Label(text=f'Report erstellt:', size_hint_y=None, height='30dp'))
+            content.add_widget(Label(text=filename, size_hint_y=None, height='40dp'))
+            btn_box = BoxLayout(size_hint_y=None, height='40dp', spacing=8)
+            share_btn = Button(text='Teilen')
+            close_btn = Button(text='OK')
+            btn_box.add_widget(share_btn)
+            btn_box.add_widget(close_btn)
+            content.add_widget(btn_box)
+            popup = Popup(title='Erfolg', content=content, size_hint=(.85, .35))
 
-            # Grand total
-            y -= 5 * mm
-            c.setFont("Helvetica-Bold", 12)
-            c.drawString(20 * mm, y, f"Gesamtstunden: {grand_total:.2f}")
+            def do_share(*a):
+                self.share_pdf(filename)
+                popup.dismiss()
 
-            c.save()
+            share_btn.bind(on_release=do_share)
+            close_btn.bind(on_release=popup.dismiss)
+            popup.open()
+
+        except Exception as e:
+            import traceback
+            error_msg = f"Fehler beim CSV-Export:\n{str(e)}\n\n{traceback.format_exc()}"
+            self.show_error('CSV-Fehler', error_msg)
+            self.write_error_log(error_msg)
 
             # Show success popup with share button
             from kivy.uix.popup import Popup
