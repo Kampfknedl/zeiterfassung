@@ -168,6 +168,15 @@ class RootWidget(BoxLayout):
             self.ids.activity_input.bind(focus=self.on_activity_focus)
         except Exception:
             pass
+        # bind customer spinner change to refresh entries
+        try:
+            self.ids.customer_spinner.bind(text=self.on_customer_changed)
+        except Exception:
+            pass
+
+    def on_customer_changed(self, instance, value):
+        """Called when customer spinner selection changes - refresh entries list"""
+        self.refresh_entries()
 
     def on_activity_focus(self, instance, value):
         # dismiss dropdown when focus lost
