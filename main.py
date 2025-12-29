@@ -725,28 +725,47 @@ class RootWidget(BoxLayout):
         from kivy.uix.popup import Popup
         from kivy.uix.label import Label
         from kivy.uix.button import Button
+        from kivy.uix.textinput import TextInput
+        from kivy.uix.scrollview import ScrollView
+        
         content = BoxLayout(orientation='vertical', spacing=8)
         act = info[2] or ''
         start = info[3] or ''
         end = info[4] or ''
         hours = f"{info[5]:.2f}"
-        content.add_widget(Label(text=f"Tätigkeit: {act}"))
-        content.add_widget(Label(text=f"Start: {start}"))
-        content.add_widget(Label(text=f"Ende: {end}"))
-        content.add_widget(Label(text=f"Std: {hours}"))
-        btns = BoxLayout(size_hint_y=None, height='40dp')
+        notes = info[6] or ''
+        
+        content.add_widget(Label(text=f"Tätigkeit: {act}", size_hint_y=None, height='30dp'))
+        content.add_widget(Label(text=f"Start: {start}", size_hint_y=None, height='30dp'))
+        content.add_widget(Label(text=f"Ende: {end}", size_hint_y=None, height='30dp'))
+        content.add_widget(Label(text=f"Std: {hours}", size_hint_y=None, height='30dp'))
+        
+        content.add_widget(Label(text="Kommentar:", size_hint_y=None, height='25dp'))
+        notes_input = TextInput(text=notes, multiline=True, size_hint_y=0.4)
+        content.add_widget(notes_input)
+        
+        btns = BoxLayout(size_hint_y=None, height='40dp', spacing=4)
+        save_btn = Button(text='Speichern')
         del_btn = Button(text='Löschen')
         cancel_btn = Button(text='Abbrechen')
+        btns.add_widget(save_btn)
         btns.add_widget(del_btn)
         btns.add_widget(cancel_btn)
         content.add_widget(btns)
-        popup = Popup(title='Eintrag', content=content, size_hint=(.9, .5))
+        
+        popup = Popup(title='Eintrag bearbeiten', content=content, size_hint=(.95, .7))
+
+        def do_save(*a):
+            db.update_entry(self.get_db_path(), entry_id, notes_input.text)
+            popup.dismiss()
+            self.refresh_entries()
 
         def do_delete(*a):
             db.delete_entry(self.get_db_path(), entry_id)
             popup.dismiss()
             self.refresh_entries()
 
+        save_btn.bind(on_release=do_save)
         del_btn.bind(on_release=do_delete)
         cancel_btn.bind(on_release=lambda *a: popup.dismiss())
         popup.open()

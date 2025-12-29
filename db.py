@@ -147,6 +147,18 @@ def get_recent_activities(path, prefix=None, limit=10):
     return rows
 
 
+def update_entry(path, entry_id, notes=''):
+    """Update entry notes/comments"""
+    conn = get_connection(path)
+    try:
+        conn.execute("UPDATE entries SET notes = ? WHERE id = ?", (notes, entry_id))
+        conn.commit()
+    except Exception:
+        pass
+    finally:
+        conn.close()
+
+
 def delete_entry(path, entry_id):
     conn = get_connection(path)
     try:
