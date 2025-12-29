@@ -90,10 +90,10 @@ RootWidget:
         height: '120dp'
         spacing: 4
         Button:
-            text: 'Report (CSV)'
+            text: 'Report (PDF)'
             size_hint_y: None
             height: '40dp'
-            on_release: root.export_csv()
+            on_release: root.export_pdf()
         BoxLayout:
             size_hint_y: None
             height: '40dp'
@@ -594,18 +594,42 @@ class RootWidget(BoxLayout):
         Popup(title='Erfasst', content=Label(text=f'Erfasst: {billed:.2f} Std (aufgerundet)'), size_hint=(.7, .3)).open()
         self.refresh_entries()
 
-    def export_csv(self):
-        # Export CSV report for selected customer - pure Python, no dependencies
+    def export_pdf(self):
+        # Export PDF using pure-Python pyfpdf (no fontTools, no C extensions)
         selected_customer = self.ids.customer_spinner.text
         if not selected_customer or selected_customer == '—':
             self.show_error('Fehler', 'Bitte Kunde auswählen')
             return
 
         try:
-            import csv
+            from fpdf import FPDF  # pyfpdf 1.7.x (pure Python)
+        except Exception as e:
+            self.show_error('PDF-Fehler', f'PDF-Bibliothek fehlt: {e}')
+            return
+
+        try:
             out_dir = self.get_documents_dir()
             os.makedirs(out_dir, exist_ok=True)
-            filename = os.path.join(out_dir, f"report_{selected_customer.replace(' ', '_')}.csv")
+            filename = os.path.join(out_dir, f"report_{selected_customer.replace(' ', '_')}.pdf")
+
+            pdf = FPDF("P", "mm", "A4")
+            pdf.add_page()
+            pdf.set_auto_page_break(auto=True, margin=15)
+
+            # Header
+            pdf.set_font("Arial", "B", 16)
+            safe_customer = selected_customer.encode('latin-1', 'replace').decode('latin-1')
+            pdf.cell(0, 10, f"Report fuer: {safe_customer}", ln=1)
+
+            cust = db.get_customer(self.get_db_path(), selected_customer)
+            pdf.set_font("Arial", size=10)
+            if cust and cust[2]:
+                pdf.cell(0, 6, f"Adresse: {cust[2].encode('latin-1','replace').decode('latin-1')}", ln=1)
+            if cust and cust[3]:
+                pdf.cell(0, 6, f"Email: {cust[3].encode('latin-1','replace').decode('latin-1')}", ln=1)
+            if cust and cust[4]:
+                pdf.cell(0, 6, f"Telefon: {cust[4].encode('latin-1','replace').decode('latin-1')}", ln=1)
+            pdf.ln(4)
 
             rows = db.get_entries(self.get_db_path(), selected_customer)
             if not rows:
@@ -626,52 +650,46 @@ class RootWidget(BoxLayout):
                 months_data[month_key].append(r)
 
             sorted_months = sorted(months_data.keys(), reverse=True)
+            grand_total = 0.0
 
-            # Write CSV
-            with open(filename, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f, delimiter=';')
-                
-                # Header
-                cust = db.get_customer(self.get_db_path(), selected_customer)
-                writer.writerow(['Report für:', selected_customer])
-                if cust and cust[2]:
-                    writer.writerow(['Adresse:', cust[2]])
-                if cust and cust[3]:
-                    writer.writerow(['Email:', cust[3]])
-                if cust and cust[4]:
-                    writer.writerow(['Telefon:', cust[4]])
-                writer.writerow([])  # blank line
-                
-                grand_total = 0.0
-                
-                # Process each month
-                for month_key in sorted_months:
-                    rows_in_month = months_data[month_key]
-                    month_total = 0.0
-                    
-                    writer.writerow([f'Monat: {month_key}'])
-                    writer.writerow(['Tätigkeit', 'Datum', 'Stunden'])
-                    
-                    for r in rows_in_month:
-                        act = (r[2] or '')[:50]
-                        date = (r[3] or '')[:10]
-                        hrs = float(r[5] or 0)
-                        writer.writerow([act, date, f'{hrs:.2f}'])
-                        month_total += hrs
-                    
-                    writer.writerow([f'Monatssumme:', '', f'{month_total:.2f}'])
-                    writer.writerow([])  # blank line
-                    grand_total += month_total
-                
-                # Grand total
-                writer.writerow(['Gesamtstunden:', '', f'{grand_total:.2f}'])
+            for month_key in sorted_months:
+                rows_in_month = months_data[month_key]
+                month_total = 0.0
 
-            # Show success popup with share button
+                pdf.set_font("Arial", "B", 12)
+                pdf.cell(0, 10, f"Monat: {month_key}", ln=1)
+
+                pdf.set_font("Arial", "B", 10)
+                pdf.cell(100, 7, "Tätigkeit", border=1)
+                pdf.cell(40, 7, "Datum", border=1)
+                pdf.cell(30, 7, "Stunden", border=1, ln=1)
+
+                pdf.set_font("Arial", size=9)
+                for r in rows_in_month:
+                    act = (r[2] or '')[:60].encode('latin-1', 'replace').decode('latin-1')
+                    date = (r[3] or '')[:10]
+                    hrs = float(r[5] or 0)
+                    pdf.cell(100, 7, act, border=1)
+                    pdf.cell(40, 7, date, border=1)
+                    pdf.cell(30, 7, f"{hrs:.2f}", border=1, ln=1)
+                    month_total += hrs
+
+                pdf.set_font("Arial", "B", 10)
+                pdf.cell(140, 7, f"Monatssumme: {month_total:.2f}", border=1, ln=1)
+                grand_total += month_total
+                pdf.ln(4)
+
+            pdf.set_font("Arial", "B", 12)
+            pdf.cell(0, 10, f"Gesamtstunden: {grand_total:.2f}", ln=1)
+
+            pdf.output(filename)
+
+            # Success popup with share
             from kivy.uix.popup import Popup
             from kivy.uix.label import Label
             from kivy.uix.button import Button
             content = BoxLayout(orientation='vertical', spacing=8)
-            content.add_widget(Label(text=f'Report erstellt:', size_hint_y=None, height='30dp'))
+            content.add_widget(Label(text='Report erstellt:', size_hint_y=None, height='30dp'))
             content.add_widget(Label(text=filename, size_hint_y=None, height='40dp'))
             btn_box = BoxLayout(size_hint_y=None, height='40dp', spacing=8)
             share_btn = Button(text='Teilen')
@@ -691,8 +709,8 @@ class RootWidget(BoxLayout):
 
         except Exception as e:
             import traceback
-            error_msg = f"Fehler beim CSV-Export:\n{str(e)}\n\n{traceback.format_exc()}"
-            self.show_error('CSV-Fehler', error_msg)
+            error_msg = f"Fehler beim PDF-Export:\n{str(e)}\n\n{traceback.format_exc()}"
+            self.show_error('PDF-Fehler', error_msg)
             self.write_error_log(error_msg)
 
             # Show success popup with share button
