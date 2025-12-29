@@ -1,2 +1,5 @@
 kivy
-reportlab
+fpdf2
+fontTools
+pillow
+pyjnius
