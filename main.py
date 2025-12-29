@@ -595,22 +595,17 @@ class RootWidget(BoxLayout):
         self.refresh_entries()
 
     def export_pdf(self):
-        # Export PDF report for selected customer using pure-Python fpdf2 (Android-friendly)
+        # Export PDF report using reportlab (Android-friendly, pure Python)
         selected_customer = self.ids.customer_spinner.text
         if not selected_customer or selected_customer == '—':
             self.show_error('Fehler', 'Bitte Kunde auswählen')
             return
         try:
-            from fpdf import FPDF
+            from reportlab.lib.pagesizes import A4
+            from reportlab.lib.units import mm
+            from reportlab.pdfgen import canvas
         except Exception as e:
             self.show_error('PDF-Fehler', f'PDF-Bibliothek fehlt: {e}')
-            return
-
-        # Proactively check fontTools availability as fpdf2 may require it on some paths
-        try:
-            import fontTools  # type: ignore
-        except Exception as e:
-            self.show_error('PDF-Fehler', f"fontTools konnte nicht geladen werden: {e}\nBitte App neu installieren, neue APK verwenden, oder Internetverbindung beim ersten Start sicherstellen.")
             return
 
         try:
@@ -618,29 +613,29 @@ class RootWidget(BoxLayout):
             os.makedirs(out_dir, exist_ok=True)
             filename = os.path.join(out_dir, f"report_{selected_customer.replace(' ', '_')}.pdf")
 
-            pdf = FPDF("P", "mm", "A4")
-            pdf.set_title(f"Report - {selected_customer}")
-            pdf.add_page()
-            pdf.set_auto_page_break(auto=True, margin=15)
+            # Create PDF
+            c = canvas.Canvas(filename, pagesize=A4)
+            width, height = A4
+            y = height - 20 * mm
 
-            # Header - use built-in font that works on Android
-            pdf.set_font("Helvetica", "B", 16)
-            # Encode strings to latin-1 safe characters
-            safe_customer = selected_customer.encode('latin-1', 'replace').decode('latin-1')
-            pdf.cell(0, 10, f"Report fuer: {safe_customer}", ln=True)
+            # Title
+            c.setFont("Helvetica-Bold", 16)
+            c.drawString(20 * mm, y, f"Report fuer: {selected_customer}")
+            y -= 10 * mm
 
+            # Customer details
             cust = db.get_customer(self.get_db_path(), selected_customer)
-            addr = (cust[2] if cust and cust[2] else '').encode('latin-1', 'replace').decode('latin-1')
-            email = (cust[3] if cust and cust[3] else '').encode('latin-1', 'replace').decode('latin-1')
-            phone = (cust[4] if cust and cust[4] else '').encode('latin-1', 'replace').decode('latin-1')
-            pdf.set_font("Helvetica", size=10)
-            if addr:
-                pdf.cell(0, 6, f"Adresse: {addr}", ln=True)
-            if email:
-                pdf.cell(0, 6, f"Email: {email}", ln=True)
-            if phone:
-                pdf.cell(0, 6, f"Telefon: {phone}", ln=True)
-            pdf.ln(4)
+            c.setFont("Helvetica", 10)
+            if cust and cust[2]:
+                c.drawString(20 * mm, y, f"Adresse: {cust[2]}")
+                y -= 5 * mm
+            if cust and cust[3]:
+                c.drawString(20 * mm, y, f"Email: {cust[3]}")
+                y -= 5 * mm
+            if cust and cust[4]:
+                c.drawString(20 * mm, y, f"Telefon: {cust[4]}")
+                y -= 5 * mm
+            y -= 5 * mm
 
             rows = db.get_entries(self.get_db_path(), selected_customer)
             if not rows:
@@ -649,20 +644,18 @@ class RootWidget(BoxLayout):
                 Popup(title='Info', content=Label(text='Keine Einträge für den ausgewählten Kunden'), size_hint=(.6, .3)).open()
                 return
 
-            # Group entries by month (YYYY-MM)
+            # Group entries by month
             from collections import defaultdict
             months_data = defaultdict(list)
             for r in rows:
-                date_str = (r[3] or '')[:10]  # e.g., "2025-01-15"
+                date_str = (r[3] or '')[:10]
                 try:
-                    month_key = date_str[:7]  # "2025-01"
+                    month_key = date_str[:7]
                 except Exception:
                     month_key = "Undatiert"
                 months_data[month_key].append(r)
 
-            # Sort months chronologically
             sorted_months = sorted(months_data.keys(), reverse=True)
-
             grand_total = 0.0
 
             # Process each month
@@ -670,39 +663,55 @@ class RootWidget(BoxLayout):
                 rows_in_month = months_data[month_key]
                 month_total = 0.0
 
+                # Check if we need a new page
+                if y < 50 * mm:
+                    c.showPage()
+                    y = height - 20 * mm
+
                 # Month header
-                pdf.set_font("Helvetica", "B", 12)
-                pdf.cell(0, 10, f"Monat: {month_key}", ln=True)
+                c.setFont("Helvetica-Bold", 12)
+                c.drawString(20 * mm, y, f"Monat: {month_key}")
+                y -= 8 * mm
 
                 # Table header
-                pdf.set_font("Helvetica", "B", 10)
-                pdf.cell(100, 7, "Tätigkeit", border=1)
-                pdf.cell(40, 7, "Datum", border=1)
-                pdf.cell(30, 7, "Stunden", border=1, ln=True)
+                c.setFont("Helvetica-Bold", 10)
+                c.drawString(20 * mm, y, "Tätigkeit")
+                c.drawString(100 * mm, y, "Datum")
+                c.drawString(140 * mm, y, "Stunden")
+                y -= 6 * mm
+                c.line(20 * mm, y, 180 * mm, y)
+                y -= 2 * mm
 
-                # Table rows for month
-                pdf.set_font("Helvetica", size=9)
+                # Table rows
+                c.setFont("Helvetica", 9)
                 for r in rows_in_month:
-                    # Safely encode all text to latin-1
-                    act = (r[2] or '')[:60].encode('latin-1', 'replace').decode('latin-1')
+                    if y < 20 * mm:
+                        c.showPage()
+                        y = height - 20 * mm
+                        c.setFont("Helvetica", 9)
+                    
+                    act = (r[2] or '')[:50]
                     date = (r[3] or '')[:10]
                     hrs = float(r[5] or 0)
-                    pdf.cell(100, 7, act, border=1)
-                    pdf.cell(40, 7, date, border=1)
-                    pdf.cell(30, 7, f"{hrs:.2f}", border=1, ln=True)
+                    c.drawString(20 * mm, y, act)
+                    c.drawString(100 * mm, y, date)
+                    c.drawString(140 * mm, y, f"{hrs:.2f}")
+                    y -= 6 * mm
                     month_total += hrs
 
                 # Month subtotal
-                pdf.set_font("Helvetica", "B", 10)
-                pdf.cell(140, 7, f"Monatssumme: {month_total:.2f}", border=1, ln=True)
+                y -= 3 * mm
+                c.setFont("Helvetica-Bold", 10)
+                c.drawString(20 * mm, y, f"Monatssumme: {month_total:.2f}")
+                y -= 8 * mm
                 grand_total += month_total
-                pdf.ln(4)
 
             # Grand total
-            pdf.set_font("Helvetica", "B", 12)
-            pdf.cell(0, 10, f"Gesamtstunden: {grand_total:.2f}", ln=True)
+            y -= 5 * mm
+            c.setFont("Helvetica-Bold", 12)
+            c.drawString(20 * mm, y, f"Gesamtstunden: {grand_total:.2f}")
 
-            pdf.output(filename)
+            c.save()
 
             # Show success popup with share button
             from kivy.uix.popup import Popup

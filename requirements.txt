@@ -1,5 +1,4 @@
 kivy
-fpdf2
-fonttools==4.38.0
+reportlab
 pillow
 pyjnius
