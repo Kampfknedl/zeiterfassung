@@ -8,7 +8,10 @@ source.include_exts = py,png,jpg,kv,atlas,db
 
 version = 1.0
 
-requirements = python3,kivy,fpdf2,fonttools,pillow,pyjnius
+requirements = python3,kivy,fpdf2,fonttools==4.38.0,pillow,pyjnius
+
+# Ensure fonttools builds from source (no prebuilt x86_64 wheels)
+pip_options = --no-binary=fonttools
 
 icon.filename = ./icon.png
 
