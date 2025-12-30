@@ -316,7 +316,7 @@ class RootWidget(BoxLayout):
             return self.get_db_dir()
 
     def show_pdf_viewer(self, filepath, customer_name):
-        # Show PDF creation success message with Share option
+        # Show PDF creation success message
         from kivy.uix.popup import Popup
         from kivy.uix.label import Label
         from kivy.uix.button import Button
@@ -346,25 +346,15 @@ class RootWidget(BoxLayout):
             markup=True
         ))
         content.add_widget(Label(
-            text='Teilen direkt über Android (Datei-Manager/Apps)',
+            text='Öffne Datei-Manager → Zeiterfassung → PDF → Teilen',
             size_hint_y=None,
-            height='40dp'
+            height='50dp'
         ))
 
-        btn_box = BoxLayout(size_hint_y=None, height='50dp', spacing=8)
-        share_btn = Button(text='📤 Teilen')
-        close_btn = Button(text='✓ OK')
-        btn_box.add_widget(share_btn)
-        btn_box.add_widget(close_btn)
-        content.add_widget(btn_box)
+        close_btn = Button(text='✓ OK', size_hint_y=None, height='50dp')
+        content.add_widget(close_btn)
 
         popup = Popup(title='Report erstellt', content=content, size_hint=(.9, .6))
-
-        def do_share(*_):
-            self.share_pdf(filepath)
-            popup.dismiss()
-
-        share_btn.bind(on_release=do_share)
         close_btn.bind(on_release=popup.dismiss)
         popup.open()
 
@@ -386,56 +376,9 @@ class RootWidget(BoxLayout):
                 return self.get_db_dir()
 
     def share_pdf(self, filepath):
-        # Copy PDF to cache and share from there to avoid FileUriExposedException
-        if not os.path.exists(filepath):
-            self.show_error('Fehler', f'Datei nicht gefunden: {filepath}')
-            return
-
-        try:
-            from jnius import autoclass, cast
-            import shutil
-            
-            Intent = autoclass('android.content.Intent')
-            Uri = autoclass('android.net.Uri')
-            File = autoclass('java.io.File')
-            String = autoclass('java.lang.String')
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            StrictMode = autoclass('android.os.StrictMode')
-
-            context = PythonActivity.mActivity
-            
-            # Disable FileUriExposure check (workaround for Android 7+)
-            try:
-                builder = StrictMode.VmPolicy.Builder()
-                StrictMode.setVmPolicy(builder.build())
-            except Exception as e:
-                print(f"StrictMode config failed: {e}")
-
-            # Copy to cache directory
-            cache_dir = context.getCacheDir()
-            cache_file = File(cache_dir, os.path.basename(filepath))
-            shutil.copy2(filepath, cache_file.getAbsolutePath())
-            
-            file_uri = Uri.fromFile(cache_file)
-
-            intent = Intent(Intent.ACTION_SEND)
-            intent.setType('application/pdf')
-
-            # Cast Uri to android.os.Parcelable to avoid the String overload
-            parcelable_uri = cast('android.os.Parcelable', file_uri)
-            intent.putExtra(Intent.EXTRA_STREAM, parcelable_uri)
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-
-            # Cast title to CharSequence for createChooser
-            title = cast('java.lang.CharSequence', String('Report teilen via'))
-            chooser = Intent.createChooser(intent, title)
-            context.startActivity(chooser)
-        except Exception as e:
-            import traceback
-            tb = traceback.format_exc()
-            error_msg = f"Fehler beim Teilen: {str(e)}\n\n{tb}"
-            self.show_error('Fehler', error_msg)
-            self.write_error_log(error_msg)
+        # Share functionality removed - jnius/Android Intent sharing is unreliable
+        # Users should share from file manager instead
+        pass
 
     def load_customers(self):
         path = self.get_db_path()
