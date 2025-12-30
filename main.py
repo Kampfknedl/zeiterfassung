@@ -311,7 +311,7 @@ class RootWidget(BoxLayout):
             return self.get_db_dir()
 
     def show_pdf_viewer(self, filepath, customer_name):
-        # Show PDF in-app with Share button
+        # Show PDF creation success message
         from kivy.uix.popup import Popup
         from kivy.uix.label import Label
         from kivy.uix.button import Button
@@ -329,60 +329,34 @@ class RootWidget(BoxLayout):
             height='30dp'
         ))
         content.add_widget(Label(
-            text='Datei bereit zum Teilen',
+            text='Datei: Downloads/Zeiterfassung/',
             size_hint_y=None,
-            height='30dp'
+            height='30dp',
+            markup=True
+        ))
+        content.add_widget(Label(
+            text=f'{os.path.basename(filepath)}',
+            size_hint_y=None,
+            height='40dp',
+            markup=True
+        ))
+        content.add_widget(Label(
+            text='Öffne die Datei im Datei-Manager und teile sie mit Teilen-Icon',
+            size_hint_y=None,
+            height='50dp'
         ))
         
-        btn_box = BoxLayout(size_hint_y=None, height='50dp', spacing=8)
-        share_btn = Button(text='📤 Teilen', size_hint_x=0.5)
-        close_btn = Button(text='✓ OK', size_hint_x=0.5)
-        btn_box.add_widget(share_btn)
-        btn_box.add_widget(close_btn)
-        content.add_widget(btn_box)
+        close_btn = Button(text='✓ OK', size_hint_y=None, height='50dp')
+        content.add_widget(close_btn)
         
-        popup = Popup(title='Report', content=content, size_hint=(.9, .4))
-        
-        def do_share(*args):
-            self.share_pdf_fileprovider(filepath)
-            popup.dismiss()
-        
-        share_btn.bind(on_release=do_share)
+        popup = Popup(title='Report erstellt', content=content, size_hint=(.9, .6))
         close_btn.bind(on_release=popup.dismiss)
         popup.open()
 
     def share_pdf_fileprovider(self, filepath):
-        # Share PDF - simple approach without FileProvider (more compatible)
-        if not os.path.exists(filepath):
-            self.show_error('Fehler', f'Datei nicht gefunden: {filepath}')
-            return
-        
-        try:
-            from jnius import autoclass
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            Intent = autoclass('android.content.Intent')
-            Uri = autoclass('android.net.Uri')
-            File = autoclass('java.io.File')
-            
-            context = PythonActivity.mActivity
-            java_file = File(filepath)
-            
-            # Use simple file:// URI - works for Downloaded files
-            file_uri = Uri.fromFile(java_file)
-            
-            # Create share intent
-            intent = Intent(Intent.ACTION_SEND)
-            intent.setType("application/pdf")
-            intent.putExtra("android.intent.extra.STREAM", file_uri)
-            
-            # Start share chooser
-            chooser = Intent.createChooser(intent, "Report teilen via")
-            context.startActivity(chooser)
-        except Exception as e:
-            import traceback
-            error_msg = f"Fehler beim Teilen: {str(e)}"
-            self.show_error('Fehler', error_msg)
-            self.write_error_log(error_msg)
+        # Removed: jnius Uri.putExtra causes TypeError with Uri objects
+        # User should share from file manager instead
+        pass
 
     def get_downloads_dir(self):
         # Try Android public Downloads directory; fallback to OS Downloads or app data
