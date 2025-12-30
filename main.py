@@ -290,25 +290,21 @@ class RootWidget(BoxLayout):
         return os.path.dirname(self.get_db_path())
 
     def get_documents_dir(self):
-        # Use app-specific external files directory (no permission needed on Android 11+)
+        # Use Downloads directory (shared, accessible to other apps via file:// URI)
         try:
             from jnius import autoclass
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
             Environment = autoclass('android.os.Environment')
-            context = PythonActivity.mActivity
-            # getExternalFilesDir returns app-specific external storage
-            # This doesn't require MANAGE_EXTERNAL_STORAGE permission
-            external_files = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
-            if external_files:
-                docs_path = os.path.join(external_files.getAbsolutePath(), 'Zeiterfassung')
-                os.makedirs(docs_path, exist_ok=True)
-                return docs_path
+            # Downloads is a shared directory that other apps can access
+            downloads_dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            docs_path = os.path.join(downloads_dir.getAbsolutePath(), 'Zeiterfassung')
+            os.makedirs(docs_path, exist_ok=True)
+            return docs_path
         except Exception as e:
-            print(f"Android external files failed: {e}")
+            print(f"Android Downloads failed: {e}")
         
         try:
-            # Fallback: Desktop Documents folder
-            docs_path = os.path.join(os.path.expanduser('~'), 'Documents', 'Zeiterfassung')
+            # Fallback: Desktop Downloads folder
+            docs_path = os.path.join(os.path.expanduser('~'), 'Downloads', 'Zeiterfassung')
             os.makedirs(docs_path, exist_ok=True)
             return docs_path
         except Exception:
@@ -717,23 +713,17 @@ class RootWidget(BoxLayout):
                 context = PythonActivity.mActivity
                 java_file = File(filename)
                 
-                # Try FileProvider for Android 7+
-                try:
-                    FileProvider = autoclass('androidx.core.content.FileProvider')
-                    authority = f"{context.getPackageName()}.fileprovider"
-                    file_uri = FileProvider.getUriForFile(context, authority, java_file)
-                except Exception:
-                    file_uri = Uri.fromFile(java_file)
+                # Use file:// URI for Downloads directory (shared, accessible to other apps)
+                file_uri = Uri.fromFile(java_file)
                 
                 # Create VIEW intent to open PDF
                 intent = Intent(Intent.ACTION_VIEW)
                 intent.setDataAndType(file_uri, "application/pdf")
-                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 
                 context.startActivity(intent)
             except Exception as e:
-                # If opening fails, show success message with path
+                # If opening fails, show error with path
                 import traceback
                 error_msg = f"PDF erstellt, aber öffnen fehlgeschlagen:\n{filename}\n\n{str(e)}"
                 self.show_error('Info', error_msg)
