@@ -706,26 +706,18 @@ class RootWidget(BoxLayout):
 
             pdf.output(filename)
 
-            # Success popup with share
+            # Success popup - without share button (jnius Uri conversion has issues)
             from kivy.uix.popup import Popup
             from kivy.uix.label import Label
             from kivy.uix.button import Button
             content = BoxLayout(orientation='vertical', spacing=8)
-            content.add_widget(Label(text='Report erstellt:', size_hint_y=None, height='30dp'))
-            content.add_widget(Label(text=filename, size_hint_y=None, height='40dp'))
-            btn_box = BoxLayout(size_hint_y=None, height='40dp', spacing=8)
-            share_btn = Button(text='Teilen')
-            close_btn = Button(text='OK')
-            btn_box.add_widget(share_btn)
-            btn_box.add_widget(close_btn)
-            content.add_widget(btn_box)
-            popup = Popup(title='Erfolg', content=content, size_hint=(.85, .35))
-
-            def do_share(*a):
-                self.share_pdf(filename)
-                popup.dismiss()
-
-            share_btn.bind(on_release=do_share)
+            content.add_widget(Label(text='Report erstellt!', size_hint_y=None, height='30dp'))
+            content.add_widget(Label(text='Öffne die Datei im Datei-Manager:', size_hint_y=None, height='30dp'))
+            content.add_widget(Label(text=filename, size_hint_y=None, height='50dp'))
+            content.add_widget(Label(text='Von dort kannst du sie teilen (WhatsApp, Email, etc.)', size_hint_y=None, height='40dp'))
+            close_btn = Button(text='OK', size_hint_y=None, height='40dp')
+            content.add_widget(close_btn)
+            popup = Popup(title='Erfolg', content=content, size_hint=(.9, .5))
             close_btn.bind(on_release=popup.dismiss)
             popup.open()
 
