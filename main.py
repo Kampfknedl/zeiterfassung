@@ -295,23 +295,25 @@ class RootWidget(BoxLayout):
         return os.path.dirname(self.get_db_path())
 
     def get_documents_dir(self):
-        # Save to public Downloads/Zeiterfassung (user-visible, no permission needed on Android 10+)
+        # Prefer app-specific external Documents directory (no runtime permission needed)
         try:
             from jnius import autoclass
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
             Environment = autoclass('android.os.Environment')
-            
-            # Get public Downloads directory
-            downloads_dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            docs_path = os.path.join(downloads_dir.getAbsolutePath(), 'Zeiterfassung')
-            os.makedirs(docs_path, exist_ok=True)
-            print(f"Android Downloads path: {docs_path}")
-            return docs_path
+
+            context = PythonActivity.mActivity
+            # Use app-specific external files dir: .../Android/data/<pkg>/files/Documents
+            ext_dir = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
+            if ext_dir is not None:
+                docs_path = os.path.join(ext_dir.getAbsolutePath(), 'Zeiterfassung')
+                os.makedirs(docs_path, exist_ok=True)
+                return docs_path
         except Exception as e:
-            print(f"Android Downloads failed: {e}")
+            print(f"Android external files dir failed: {e}")
 
         try:
-            # Fallback: Desktop Downloads folder (desktop usage)
-            docs_path = os.path.join(os.path.expanduser('~'), 'Downloads', 'Zeiterfassung')
+            # Fallback: Desktop Documents folder (desktop usage)
+            docs_path = os.path.join(os.path.expanduser('~'), 'Documents', 'Zeiterfassung')
             os.makedirs(docs_path, exist_ok=True)
             return docs_path
         except Exception:
