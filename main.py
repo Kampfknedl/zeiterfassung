@@ -290,26 +290,103 @@ class RootWidget(BoxLayout):
         return os.path.dirname(self.get_db_path())
 
     def get_documents_dir(self):
-        # Use Downloads directory (shared, accessible to other apps via file:// URI)
+        # Save PDFs in app's private files directory (use FileProvider for sharing)
         try:
             from jnius import autoclass
-            Environment = autoclass('android.os.Environment')
-            # Downloads is a shared directory that other apps can access
-            downloads_dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            docs_path = os.path.join(downloads_dir.getAbsolutePath(), 'Zeiterfassung')
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            context = PythonActivity.mActivity
+            # Use app-specific files directory
+            files_dir = context.getFilesDir()
+            docs_path = os.path.join(files_dir.getAbsolutePath(), 'reports')
             os.makedirs(docs_path, exist_ok=True)
             return docs_path
         except Exception as e:
-            print(f"Android Downloads failed: {e}")
+            print(f"Android files dir failed: {e}")
         
         try:
-            # Fallback: Desktop Downloads folder
-            docs_path = os.path.join(os.path.expanduser('~'), 'Downloads', 'Zeiterfassung')
+            # Fallback: Desktop Documents folder
+            docs_path = os.path.join(os.path.expanduser('~'), 'Documents', 'Zeiterfassung')
             os.makedirs(docs_path, exist_ok=True)
             return docs_path
         except Exception:
             # Last resort: app internal data directory
             return self.get_db_dir()
+
+    def show_pdf_viewer(self, filepath, customer_name):
+        # Show PDF in-app with Share button
+        from kivy.uix.popup import Popup
+        from kivy.uix.label import Label
+        from kivy.uix.button import Button
+        
+        content = BoxLayout(orientation='vertical', spacing=8, padding=10)
+        content.add_widget(Label(
+            text='✓ Report erstellt!',
+            size_hint_y=None,
+            height='40dp',
+            font_size='16sp'
+        ))
+        content.add_widget(Label(
+            text=f'Customer: {customer_name}',
+            size_hint_y=None,
+            height='30dp'
+        ))
+        content.add_widget(Label(
+            text='Datei bereit zum Teilen',
+            size_hint_y=None,
+            height='30dp'
+        ))
+        
+        btn_box = BoxLayout(size_hint_y=None, height='50dp', spacing=8)
+        share_btn = Button(text='📤 Teilen', size_hint_x=0.5)
+        close_btn = Button(text='✓ OK', size_hint_x=0.5)
+        btn_box.add_widget(share_btn)
+        btn_box.add_widget(close_btn)
+        content.add_widget(btn_box)
+        
+        popup = Popup(title='Report', content=content, size_hint=(.9, .4))
+        
+        def do_share(*args):
+            self.share_pdf_fileprovider(filepath)
+            popup.dismiss()
+        
+        share_btn.bind(on_release=do_share)
+        close_btn.bind(on_release=popup.dismiss)
+        popup.open()
+
+    def share_pdf_fileprovider(self, filepath):
+        # Share PDF using FileProvider (works on Android 7+)
+        if not os.path.exists(filepath):
+            self.show_error('Fehler', f'Datei nicht gefunden: {filepath}')
+            return
+        
+        try:
+            from jnius import autoclass
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            Intent = autoclass('android.content.Intent')
+            File = autoclass('java.io.File')
+            FileProvider = autoclass('androidx.core.content.FileProvider')
+            
+            context = PythonActivity.mActivity
+            authority = f"{context.getPackageName()}.fileprovider"
+            
+            # Create FileProvider Uri (content://, not file://)
+            java_file = File(filepath)
+            file_uri = FileProvider.getUriForFile(context, authority, java_file)
+            
+            # Create share intent
+            intent = Intent(Intent.ACTION_SEND)
+            intent.setType("application/pdf")
+            intent.putExtra("android.intent.extra.STREAM", file_uri)
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            
+            # Start share chooser
+            chooser = Intent.createChooser(intent, "Report teilen via")
+            context.startActivity(chooser)
+        except Exception as e:
+            import traceback
+            error_msg = f"Fehler beim Teilen: {str(e)}\n\n{traceback.format_exc()}"
+            self.show_error('Fehler', error_msg)
+            self.write_error_log(error_msg)
 
     def get_downloads_dir(self):
         # Try Android public Downloads directory; fallback to OS Downloads or app data
@@ -702,42 +779,8 @@ class RootWidget(BoxLayout):
 
             pdf.output(filename)
 
-            # Success message - PDF is ready in Downloads
-            from kivy.uix.popup import Popup
-            from kivy.uix.label import Label
-            from kivy.uix.button import Button
-            
-            content = BoxLayout(orientation='vertical', spacing=8, padding=10)
-            content.add_widget(Label(
-                text='✓ Report erstellt!',
-                size_hint_y=None,
-                height='40dp',
-                font_size='16sp'
-            ))
-            content.add_widget(Label(
-                text='Öffne die Datei in Downloads:',
-                size_hint_y=None,
-                height='30dp'
-            ))
-            content.add_widget(Label(
-                text=f'report_{selected_customer.replace(" ", "_")}.pdf',
-                size_hint_y=None,
-                height='40dp',
-                markup=True,
-                text_size=(300, None)
-            ))
-            content.add_widget(Label(
-                text='Von dort kannst du sie teilen (WhatsApp, Email, etc.)',
-                size_hint_y=None,
-                height='40dp'
-            ))
-            
-            btn = Button(text='OK', size_hint_y=None, height='40dp')
-            content.add_widget(btn)
-            
-            popup = Popup(title='Erfolg', content=content, size_hint=(.9, .5))
-            btn.bind(on_release=popup.dismiss)
-            popup.open()
+            # Show PDF in-app with Share button
+            self.show_pdf_viewer(filename, selected_customer)
 
         except Exception as e:
             import traceback
