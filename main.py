@@ -311,11 +311,11 @@ class RootWidget(BoxLayout):
             return self.get_db_dir()
 
     def show_pdf_viewer(self, filepath, customer_name):
-        # Show PDF creation success message
+        # Show PDF creation success message with Share option
         from kivy.uix.popup import Popup
         from kivy.uix.label import Label
         from kivy.uix.button import Button
-        
+
         content = BoxLayout(orientation='vertical', spacing=8, padding=10)
         content.add_widget(Label(
             text='✓ Report erstellt!',
@@ -341,22 +341,31 @@ class RootWidget(BoxLayout):
             markup=True
         ))
         content.add_widget(Label(
-            text='Öffne die Datei im Datei-Manager und teile sie mit Teilen-Icon',
+            text='Teilen direkt über Android (Datei-Manager/Apps)',
             size_hint_y=None,
-            height='50dp'
+            height='40dp'
         ))
-        
-        close_btn = Button(text='✓ OK', size_hint_y=None, height='50dp')
-        content.add_widget(close_btn)
-        
+
+        btn_box = BoxLayout(size_hint_y=None, height='50dp', spacing=8)
+        share_btn = Button(text='📤 Teilen')
+        close_btn = Button(text='✓ OK')
+        btn_box.add_widget(share_btn)
+        btn_box.add_widget(close_btn)
+        content.add_widget(btn_box)
+
         popup = Popup(title='Report erstellt', content=content, size_hint=(.9, .6))
+
+        def do_share(*_):
+            self.share_pdf(filepath)
+            popup.dismiss()
+
+        share_btn.bind(on_release=do_share)
         close_btn.bind(on_release=popup.dismiss)
         popup.open()
 
     def share_pdf_fileprovider(self, filepath):
-        # Removed: jnius Uri.putExtra causes TypeError with Uri objects
-        # User should share from file manager instead
-        pass
+        # Deprecated placeholder; share_pdf is used instead
+        return
 
     def get_downloads_dir(self):
         # Try Android public Downloads directory; fallback to OS Downloads or app data
@@ -372,50 +381,31 @@ class RootWidget(BoxLayout):
                 return self.get_db_dir()
 
     def share_pdf(self, filepath):
-        # Open Android share intent for the PDF file
+        # Open Android share intent for the PDF file using Parcelable casting (avoids jnius type mismatch)
         if not os.path.exists(filepath):
             self.show_error('Fehler', f'Datei nicht gefunden: {filepath}')
             return
-            
+
         try:
-            from jnius import autoclass
-            PythonJavaClass = autoclass('org.kivy.android.PythonActivity')
+            from jnius import autoclass, cast
             Intent = autoclass('android.content.Intent')
             Uri = autoclass('android.net.Uri')
             File = autoclass('java.io.File')
-            
-            # Create File object
-            java_file = File(filepath)
-            
-            # Try FileProvider first (Android 7+)
-            file_uri = None
-            try:
-                FileProvider = autoclass('androidx.core.content.FileProvider')
-                context = PythonJavaClass.mActivity
-                authority = f"{context.getPackageName()}.fileprovider"
-                file_uri = FileProvider.getUriForFile(context, authority, java_file)
-                print(f"FileProvider Uri: {file_uri}")
-            except Exception as e:
-                print(f"FileProvider failed: {e}")
-                file_uri = None
-            
-            # Fallback: direct file Uri
-            if file_uri is None:
-                file_uri = Uri.fromFile(java_file)
-                print(f"Using direct file Uri: {file_uri}")
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
 
-            # Create share intent
+            java_file = File(filepath)
+            file_uri = Uri.fromFile(java_file)
+
             intent = Intent(Intent.ACTION_SEND)
-            intent.setType("application/pdf")
-            
-            # Add the Uri as EXTRA_STREAM - use the method signature that works
-            # Pass uri as android.os.Parcelable
-            intent.putExtra("android.intent.extra.STREAM", file_uri)
+            intent.setType('application/pdf')
+
+            # Cast Uri to android.os.Parcelable to avoid the String overload
+            parcelable_uri = cast('android.os.Parcelable', file_uri)
+            intent.putExtra(Intent.EXTRA_STREAM, parcelable_uri)
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
 
-            # Start chooser
-            chooser = Intent.createChooser(intent, "Report teilen via")
-            PythonJavaClass.mActivity.startActivity(chooser)
+            chooser = Intent.createChooser(intent, 'Report teilen via')
+            PythonActivity.mActivity.startActivity(chooser)
         except Exception as e:
             import traceback
             tb = traceback.format_exc()
@@ -751,35 +741,6 @@ class RootWidget(BoxLayout):
 
             # Show PDF in-app with Share button
             self.show_pdf_viewer(filename, selected_customer)
-
-        except Exception as e:
-            import traceback
-            error_msg = f"Fehler beim PDF-Export:\n{str(e)}\n\n{traceback.format_exc()}"
-            self.show_error('PDF-Fehler', error_msg)
-            self.write_error_log(error_msg)
-
-            # Show success popup with share button
-            from kivy.uix.popup import Popup
-            from kivy.uix.label import Label
-            from kivy.uix.button import Button
-            content = BoxLayout(orientation='vertical', spacing=8)
-            content.add_widget(Label(text=f'Report erstellt:', size_hint_y=None, height='30dp'))
-            content.add_widget(Label(text=filename, size_hint_y=None, height='40dp'))
-            btn_box = BoxLayout(size_hint_y=None, height='40dp', spacing=8)
-            share_btn = Button(text='Teilen')
-            close_btn = Button(text='OK')
-            btn_box.add_widget(share_btn)
-            btn_box.add_widget(close_btn)
-            content.add_widget(btn_box)
-            popup = Popup(title='Erfolg', content=content, size_hint=(.85, .35))
-
-            def do_share(*a):
-                self.share_pdf(filename)
-                popup.dismiss()
-
-            share_btn.bind(on_release=do_share)
-            close_btn.bind(on_release=popup.dismiss)
-            popup.open()
 
         except Exception as e:
             import traceback
