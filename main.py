@@ -702,31 +702,42 @@ class RootWidget(BoxLayout):
 
             pdf.output(filename)
 
-            # Open PDF directly after creation
-            try:
-                from jnius import autoclass
-                PythonActivity = autoclass('org.kivy.android.PythonActivity')
-                Intent = autoclass('android.content.Intent')
-                Uri = autoclass('android.net.Uri')
-                File = autoclass('java.io.File')
-                
-                context = PythonActivity.mActivity
-                java_file = File(filename)
-                
-                # Use file:// URI for Downloads directory (shared, accessible to other apps)
-                file_uri = Uri.fromFile(java_file)
-                
-                # Create VIEW intent to open PDF
-                intent = Intent(Intent.ACTION_VIEW)
-                intent.setDataAndType(file_uri, "application/pdf")
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                
-                context.startActivity(intent)
-            except Exception as e:
-                # If opening fails, show error with path
-                import traceback
-                error_msg = f"PDF erstellt, aber öffnen fehlgeschlagen:\n{filename}\n\n{str(e)}"
-                self.show_error('Info', error_msg)
+            # Success message - PDF is ready in Downloads
+            from kivy.uix.popup import Popup
+            from kivy.uix.label import Label
+            from kivy.uix.button import Button
+            
+            content = BoxLayout(orientation='vertical', spacing=8, padding=10)
+            content.add_widget(Label(
+                text='✓ Report erstellt!',
+                size_hint_y=None,
+                height='40dp',
+                font_size='16sp'
+            ))
+            content.add_widget(Label(
+                text='Öffne die Datei in Downloads:',
+                size_hint_y=None,
+                height='30dp'
+            ))
+            content.add_widget(Label(
+                text=f'report_{selected_customer.replace(" ", "_")}.pdf',
+                size_hint_y=None,
+                height='40dp',
+                markup=True,
+                text_size=(300, None)
+            ))
+            content.add_widget(Label(
+                text='Von dort kannst du sie teilen (WhatsApp, Email, etc.)',
+                size_hint_y=None,
+                height='40dp'
+            ))
+            
+            btn = Button(text='OK', size_hint_y=None, height='40dp')
+            content.add_widget(btn)
+            
+            popup = Popup(title='Erfolg', content=content, size_hint=(.9, .5))
+            btn.bind(on_release=popup.dismiss)
+            popup.open()
 
         except Exception as e:
             import traceback
