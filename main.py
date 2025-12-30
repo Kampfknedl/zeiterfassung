@@ -706,20 +706,37 @@ class RootWidget(BoxLayout):
 
             pdf.output(filename)
 
-            # Success popup - without share button (jnius Uri conversion has issues)
-            from kivy.uix.popup import Popup
-            from kivy.uix.label import Label
-            from kivy.uix.button import Button
-            content = BoxLayout(orientation='vertical', spacing=8)
-            content.add_widget(Label(text='Report erstellt!', size_hint_y=None, height='30dp'))
-            content.add_widget(Label(text='Öffne die Datei im Datei-Manager:', size_hint_y=None, height='30dp'))
-            content.add_widget(Label(text=filename, size_hint_y=None, height='50dp'))
-            content.add_widget(Label(text='Von dort kannst du sie teilen (WhatsApp, Email, etc.)', size_hint_y=None, height='40dp'))
-            close_btn = Button(text='OK', size_hint_y=None, height='40dp')
-            content.add_widget(close_btn)
-            popup = Popup(title='Erfolg', content=content, size_hint=(.9, .5))
-            close_btn.bind(on_release=popup.dismiss)
-            popup.open()
+            # Open PDF directly after creation
+            try:
+                from jnius import autoclass
+                PythonActivity = autoclass('org.kivy.android.PythonActivity')
+                Intent = autoclass('android.content.Intent')
+                Uri = autoclass('android.net.Uri')
+                File = autoclass('java.io.File')
+                
+                context = PythonActivity.mActivity
+                java_file = File(filename)
+                
+                # Try FileProvider for Android 7+
+                try:
+                    FileProvider = autoclass('androidx.core.content.FileProvider')
+                    authority = f"{context.getPackageName()}.fileprovider"
+                    file_uri = FileProvider.getUriForFile(context, authority, java_file)
+                except Exception:
+                    file_uri = Uri.fromFile(java_file)
+                
+                # Create VIEW intent to open PDF
+                intent = Intent(Intent.ACTION_VIEW)
+                intent.setDataAndType(file_uri, "application/pdf")
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                
+                context.startActivity(intent)
+            except Exception as e:
+                # If opening fails, show success message with path
+                import traceback
+                error_msg = f"PDF erstellt, aber öffnen fehlgeschlagen:\n{filename}\n\n{str(e)}"
+                self.show_error('Info', error_msg)
 
         except Exception as e:
             import traceback
