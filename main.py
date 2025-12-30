@@ -290,25 +290,30 @@ class RootWidget(BoxLayout):
         return os.path.dirname(self.get_db_path())
 
     def get_documents_dir(self):
-        # Return reliable path for saving reports to device Documents folder
+        # Use app-specific external files directory (no permission needed on Android 11+)
         try:
-            # Try Android public Documents directory first
             from jnius import autoclass
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
             Environment = autoclass('android.os.Environment')
-            # Use getExternalStorageDirectory() which is more reliable
-            external_dir = Environment.getExternalStorageDirectory()
-            docs_path = os.path.join(external_dir.getAbsolutePath(), 'Documents', 'Zeiterfassung')
+            context = PythonActivity.mActivity
+            # getExternalFilesDir returns app-specific external storage
+            # This doesn't require MANAGE_EXTERNAL_STORAGE permission
+            external_files = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
+            if external_files:
+                docs_path = os.path.join(external_files.getAbsolutePath(), 'Zeiterfassung')
+                os.makedirs(docs_path, exist_ok=True)
+                return docs_path
+        except Exception as e:
+            print(f"Android external files failed: {e}")
+        
+        try:
+            # Fallback: Desktop Documents folder
+            docs_path = os.path.join(os.path.expanduser('~'), 'Documents', 'Zeiterfassung')
             os.makedirs(docs_path, exist_ok=True)
             return docs_path
         except Exception:
-            try:
-                # Fallback: use Home/Documents on desktop
-                docs_path = os.path.join(os.path.expanduser('~'), 'Documents', 'Zeiterfassung')
-                os.makedirs(docs_path, exist_ok=True)
-                return docs_path
-            except Exception:
-                # Last resort: app data directory
-                return self.get_db_dir()
+            # Last resort: app internal data directory
+            return self.get_db_dir()
 
     def get_downloads_dir(self):
         # Try Android public Downloads directory; fallback to OS Downloads or app data
