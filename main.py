@@ -94,6 +94,11 @@ RootWidget:
             size_hint_y: None
             height: '40dp'
             on_release: root.export_pdf()
+        Button:
+            text: 'Report + Teilen'
+            size_hint_y: None
+            height: '40dp'
+            on_release: root.export_pdf(auto_share=True)
         BoxLayout:
             size_hint_y: None
             height: '40dp'
@@ -701,7 +706,7 @@ class RootWidget(BoxLayout):
         Popup(title='Erfasst', content=Label(text=f'Erfasst: {billed:.2f} Std (aufgerundet)'), size_hint=(.7, .3)).open()
         self.refresh_entries()
 
-    def export_pdf(self):
+    def export_pdf(self, auto_share=False):
         # Export PDF using pure-Python pyfpdf (no fontTools, no C extensions)
         selected_customer = self.ids.customer_spinner.text
         if not selected_customer or selected_customer == '—':
@@ -795,8 +800,12 @@ class RootWidget(BoxLayout):
             # Attempt to place into public Documents/Zeiterfassung via MediaStore
             display_path, share_uri_str = self.save_pdf_to_public_documents(temp_path, base_name)
 
-            # Show PDF location with optional share button
-            self.show_pdf_viewer(display_path, selected_customer, share_uri_str)
+            if auto_share and share_uri_str:
+                # Directly open share sheet
+                self.share_pdf(share_uri_str)
+            else:
+                # Show PDF location with optional share button
+                self.show_pdf_viewer(display_path, selected_customer, share_uri_str)
 
         except Exception as e:
             import traceback
