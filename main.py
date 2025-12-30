@@ -290,22 +290,20 @@ class RootWidget(BoxLayout):
         return os.path.dirname(self.get_db_path())
 
     def get_documents_dir(self):
-        # Save PDFs in app's private files directory (use FileProvider for sharing)
+        # Save PDFs in Downloads (accessible for sharing)
         try:
             from jnius import autoclass
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            context = PythonActivity.mActivity
-            # Use app-specific files directory
-            files_dir = context.getFilesDir()
-            docs_path = os.path.join(files_dir.getAbsolutePath(), 'reports')
+            Environment = autoclass('android.os.Environment')
+            downloads_dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            docs_path = os.path.join(downloads_dir.getAbsolutePath(), 'Zeiterfassung')
             os.makedirs(docs_path, exist_ok=True)
             return docs_path
         except Exception as e:
-            print(f"Android files dir failed: {e}")
+            print(f"Android Downloads failed: {e}")
         
         try:
-            # Fallback: Desktop Documents folder
-            docs_path = os.path.join(os.path.expanduser('~'), 'Documents', 'Zeiterfassung')
+            # Fallback: Desktop Downloads folder
+            docs_path = os.path.join(os.path.expanduser('~'), 'Downloads', 'Zeiterfassung')
             os.makedirs(docs_path, exist_ok=True)
             return docs_path
         except Exception:
@@ -354,7 +352,7 @@ class RootWidget(BoxLayout):
         popup.open()
 
     def share_pdf_fileprovider(self, filepath):
-        # Share PDF using FileProvider (works on Android 7+)
+        # Share PDF - simple approach without FileProvider (more compatible)
         if not os.path.exists(filepath):
             self.show_error('Fehler', f'Datei nicht gefunden: {filepath}')
             return
@@ -363,28 +361,26 @@ class RootWidget(BoxLayout):
             from jnius import autoclass
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
             Intent = autoclass('android.content.Intent')
+            Uri = autoclass('android.net.Uri')
             File = autoclass('java.io.File')
-            FileProvider = autoclass('androidx.core.content.FileProvider')
             
             context = PythonActivity.mActivity
-            authority = f"{context.getPackageName()}.fileprovider"
-            
-            # Create FileProvider Uri (content://, not file://)
             java_file = File(filepath)
-            file_uri = FileProvider.getUriForFile(context, authority, java_file)
+            
+            # Use simple file:// URI - works for Downloaded files
+            file_uri = Uri.fromFile(java_file)
             
             # Create share intent
             intent = Intent(Intent.ACTION_SEND)
             intent.setType("application/pdf")
             intent.putExtra("android.intent.extra.STREAM", file_uri)
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             
             # Start share chooser
             chooser = Intent.createChooser(intent, "Report teilen via")
             context.startActivity(chooser)
         except Exception as e:
             import traceback
-            error_msg = f"Fehler beim Teilen: {str(e)}\n\n{traceback.format_exc()}"
+            error_msg = f"Fehler beim Teilen: {str(e)}"
             self.show_error('Fehler', error_msg)
             self.write_error_log(error_msg)
 
