@@ -290,19 +290,24 @@ class RootWidget(BoxLayout):
         return os.path.dirname(self.get_db_path())
 
     def get_documents_dir(self):
-        # Save PDFs in Downloads (accessible for sharing)
+        # Prefer app-specific external Documents directory (no runtime permission needed)
         try:
             from jnius import autoclass
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
             Environment = autoclass('android.os.Environment')
-            downloads_dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            docs_path = os.path.join(downloads_dir.getAbsolutePath(), 'Zeiterfassung')
-            os.makedirs(docs_path, exist_ok=True)
-            return docs_path
+
+            context = PythonActivity.mActivity
+            # Use app-specific external files dir: .../Android/data/<pkg>/files/Documents
+            ext_dir = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
+            if ext_dir is not None:
+                docs_path = os.path.join(ext_dir.getAbsolutePath(), 'Zeiterfassung')
+                os.makedirs(docs_path, exist_ok=True)
+                return docs_path
         except Exception as e:
-            print(f"Android Downloads failed: {e}")
-        
+            print(f"Android external files dir failed: {e}")
+
         try:
-            # Fallback: Desktop Downloads folder
+            # Fallback: Desktop Downloads folder (desktop usage)
             docs_path = os.path.join(os.path.expanduser('~'), 'Downloads', 'Zeiterfassung')
             os.makedirs(docs_path, exist_ok=True)
             return docs_path
@@ -329,13 +334,13 @@ class RootWidget(BoxLayout):
             height='30dp'
         ))
         content.add_widget(Label(
-            text='Datei: Downloads/Zeiterfassung/',
+            text=f'Pfad: {os.path.dirname(filepath)}',
             size_hint_y=None,
-            height='30dp',
+            height='40dp',
             markup=True
         ))
         content.add_widget(Label(
-            text=f'{os.path.basename(filepath)}',
+            text=f'Datei: {os.path.basename(filepath)}',
             size_hint_y=None,
             height='40dp',
             markup=True
