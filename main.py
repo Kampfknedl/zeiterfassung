@@ -321,58 +321,11 @@ class RootWidget(BoxLayout):
             return self.get_db_dir()
 
     def save_pdf_to_public_documents(self, temp_path, base_filename):
-        """Try to place the PDF into public Download/Zeiterfassung via MediaStore.
-        Uses MediaStore.Files (broader support). Returns (display_path_str, uri_string_or_None).
-        """
-        try:
-            from jnius import autoclass
-            import shutil
-
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            MediaStore = autoclass('android.provider.MediaStore')
-            ContentValues = autoclass('android.content.ContentValues')
-
-            context = PythonActivity.mActivity
-            resolver = context.getContentResolver()
-
-            # Use Files collection for compatibility
-            collection = MediaStore.Files.getContentUri("external")
-            values = ContentValues()
-            values.put(MediaStore.MediaColumns.DISPLAY_NAME, base_filename)
-            values.put(MediaStore.MediaColumns.MIME_TYPE, 'application/pdf')
-            values.put(MediaStore.MediaColumns.RELATIVE_PATH, 'Download/Zeiterfassung')
-
-            uri = resolver.insert(collection, values)
-            print(f"MediaStore URI: {uri}")
-            
-            if uri is not None:
-                inp = open(temp_path, 'rb')
-                out = resolver.openOutputStream(uri)
-                try:
-                    shutil.copyfileobj(inp, out)
-                    print("PDF copied to MediaStore successfully")
-                finally:
-                    try:
-                        out.close()
-                    except Exception:
-                        pass
-                    try:
-                        inp.close()
-                    except Exception:
-                        pass
-                return os.path.join('Download/Zeiterfassung', base_filename), str(uri)
-            else:
-                print("MediaStore insert returned None")
-        except Exception as e:
-            import traceback
-            error_msg = f"MediaStore write failed: {str(e)}\n{traceback.format_exc()}"
-            print(error_msg)
-            self.show_error('MediaStore Fehler', error_msg)
-
+        """Deprecated: MediaStore path handling caused compatibility issues."""
         return temp_path, None
 
     def show_pdf_viewer(self, filepath_display, customer_name, share_uri_str=None):
-        # Show PDF creation success message with optional Share button when a content Uri is available
+        # Show PDF creation success message (no MediaStore sharing)
         from kivy.uix.popup import Popup
         from kivy.uix.label import Label
         from kivy.uix.button import Button
@@ -401,39 +354,16 @@ class RootWidget(BoxLayout):
             height='40dp',
             markup=True
         ))
-        if share_uri_str:
-            content.add_widget(Label(
-                text='Teilen direkt aus der App',
-                size_hint_y=None,
-                height='40dp'
-            ))
-            btn_box = BoxLayout(size_hint_y=None, height='50dp', spacing=8)
-            share_btn = Button(text='📤 Teilen')
-            close_btn = Button(text='✓ OK')
-            btn_box.add_widget(share_btn)
-            btn_box.add_widget(close_btn)
-            content.add_widget(btn_box)
-
-            popup = Popup(title='Report erstellt', content=content, size_hint=(.9, .6))
-
-            def do_share(*_):
-                self.share_pdf(share_uri_str)
-                popup.dismiss()
-
-            share_btn.bind(on_release=do_share)
-            close_btn.bind(on_release=popup.dismiss)
-            popup.open()
-        else:
-            content.add_widget(Label(
-                text='Datei im App-Ordner gespeichert - öffne im Datei-Manager zum Teilen',
-                size_hint_y=None,
-                height='50dp'
-            ))
-            close_btn = Button(text='✓ OK', size_hint_y=None, height='50dp')
-            content.add_widget(close_btn)
-            popup = Popup(title='Report erstellt', content=content, size_hint=(.9, .6))
-            close_btn.bind(on_release=popup.dismiss)
-            popup.open()
+        content.add_widget(Label(
+            text='Datei im Ordner gespeichert - öffne im Datei-Manager zum Teilen',
+            size_hint_y=None,
+            height='50dp'
+        ))
+        close_btn = Button(text='✓ OK', size_hint_y=None, height='50dp')
+        content.add_widget(close_btn)
+        popup = Popup(title='Report erstellt', content=content, size_hint=(.9, .6))
+        close_btn.bind(on_release=popup.dismiss)
+        popup.open()
 
     def share_pdf_fileprovider(self, filepath):
         # Deprecated placeholder; share_pdf is used instead
@@ -804,17 +734,14 @@ class RootWidget(BoxLayout):
 
             pdf.output(temp_path)
 
-            # Attempt to place into public Documents/Zeiterfassung via MediaStore
-            display_path, share_uri_str = self.save_pdf_to_public_documents(temp_path, base_name)
+            # No MediaStore: keep file on filesystem
+            display_path = temp_path
 
             if auto_share:
-                if share_uri_str:
-                    self.share_pdf(share_uri_str)
-                else:
-                    self.show_error('Fehler', 'PDF konnte nicht im Ordner Download/Zeiterfassung gespeichert werden. Bitte Datei-Manager nutzen.')
+                # No auto-share without MediaStore; inform user
+                self.show_pdf_viewer(display_path, selected_customer, None)
             else:
-                # Show PDF location with optional share button
-                self.show_pdf_viewer(display_path, selected_customer, share_uri_str)
+                self.show_pdf_viewer(display_path, selected_customer, None)
 
         except Exception as e:
             import traceback
