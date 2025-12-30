@@ -307,16 +307,60 @@ class RootWidget(BoxLayout):
             print(f"Android external files dir failed: {e}")
 
         try:
-            # Fallback: Desktop Downloads folder (desktop usage)
-            docs_path = os.path.join(os.path.expanduser('~'), 'Downloads', 'Zeiterfassung')
+            # Fallback: Desktop Documents folder (desktop usage)
+            docs_path = os.path.join(os.path.expanduser('~'), 'Documents', 'Zeiterfassung')
             os.makedirs(docs_path, exist_ok=True)
             return docs_path
         except Exception:
             # Last resort: app internal data directory
             return self.get_db_dir()
 
-    def show_pdf_viewer(self, filepath, customer_name):
-        # Show PDF creation success message
+    def save_pdf_to_public_documents(self, temp_path, base_filename):
+        """Try to place the PDF into public Documents/Zeiterfassung via MediaStore (Android 10+).
+        Returns (display_path_str, uri_string_or_None).
+        """
+        try:
+            from jnius import autoclass
+            import shutil
+
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            MediaStore = autoclass('android.provider.MediaStore')
+            ContentValues = autoclass('android.content.ContentValues')
+
+            context = PythonActivity.mActivity
+            resolver = context.getContentResolver()
+
+            collection = MediaStore.Downloads.getContentUri("external")
+            values = ContentValues()
+            values.put(MediaStore.MediaColumns.DISPLAY_NAME, base_filename)
+            values.put(MediaStore.MediaColumns.MIME_TYPE, 'application/pdf')
+            values.put(MediaStore.MediaColumns.RELATIVE_PATH, 'Documents/Zeiterfassung')
+
+            uri = resolver.insert(collection, values)
+            if uri is not None:
+                inp = open(temp_path, 'rb')
+                out = resolver.openOutputStream(uri)
+                try:
+                    shutil.copyfileobj(inp, out)
+                finally:
+                    try:
+                        out.close()
+                    except Exception:
+                        pass
+                    try:
+                        inp.close()
+                    except Exception:
+                        pass
+                # Return user-facing relative path and sharable content Uri string
+                return os.path.join('Dokumente/Zeiterfassung', base_filename), str(uri)
+        except Exception as e:
+            print(f"MediaStore write failed: {e}")
+
+        # Fallback: keep temp_path (app-specific)
+        return temp_path, None
+
+    def show_pdf_viewer(self, filepath_display, customer_name, share_uri_str=None):
+        # Show PDF creation success message with optional Share button when a content Uri is available
         from kivy.uix.popup import Popup
         from kivy.uix.label import Label
         from kivy.uix.button import Button
@@ -334,29 +378,50 @@ class RootWidget(BoxLayout):
             height='30dp'
         ))
         content.add_widget(Label(
-            text=f'Pfad: {os.path.dirname(filepath)}',
+            text=f'Pfad: {os.path.dirname(filepath_display)}',
             size_hint_y=None,
             height='40dp',
             markup=True
         ))
         content.add_widget(Label(
-            text=f'Datei: {os.path.basename(filepath)}',
+            text=f'Datei: {os.path.basename(filepath_display)}',
             size_hint_y=None,
             height='40dp',
             markup=True
         ))
-        content.add_widget(Label(
-            text='Öffne Datei-Manager → Zeiterfassung → PDF → Teilen',
-            size_hint_y=None,
-            height='50dp'
-        ))
+        if share_uri_str:
+            content.add_widget(Label(
+                text='Teilen direkt aus der App',
+                size_hint_y=None,
+                height='40dp'
+            ))
+            btn_box = BoxLayout(size_hint_y=None, height='50dp', spacing=8)
+            share_btn = Button(text='📤 Teilen')
+            close_btn = Button(text='✓ OK')
+            btn_box.add_widget(share_btn)
+            btn_box.add_widget(close_btn)
+            content.add_widget(btn_box)
 
-        close_btn = Button(text='✓ OK', size_hint_y=None, height='50dp')
-        content.add_widget(close_btn)
+            popup = Popup(title='Report erstellt', content=content, size_hint=(.9, .6))
 
-        popup = Popup(title='Report erstellt', content=content, size_hint=(.9, .6))
-        close_btn.bind(on_release=popup.dismiss)
-        popup.open()
+            def do_share(*_):
+                self.share_pdf(share_uri_str)
+                popup.dismiss()
+
+            share_btn.bind(on_release=do_share)
+            close_btn.bind(on_release=popup.dismiss)
+            popup.open()
+        else:
+            content.add_widget(Label(
+                text='Öffne Datei-Manager → Dokumente/Zeiterfassung → PDF → Teilen',
+                size_hint_y=None,
+                height='50dp'
+            ))
+            close_btn = Button(text='✓ OK', size_hint_y=None, height='50dp')
+            content.add_widget(close_btn)
+            popup = Popup(title='Report erstellt', content=content, size_hint=(.9, .6))
+            close_btn.bind(on_release=popup.dismiss)
+            popup.open()
 
     def share_pdf_fileprovider(self, filepath):
         # Deprecated placeholder; share_pdf is used instead
@@ -375,10 +440,30 @@ class RootWidget(BoxLayout):
             except Exception:
                 return self.get_db_dir()
 
-    def share_pdf(self, filepath):
-        # Share functionality removed - jnius/Android Intent sharing is unreliable
-        # Users should share from file manager instead
-        pass
+    def share_pdf(self, uri_string):
+        # Share a content Uri (from MediaStore insert) via Android share sheet
+        try:
+            from jnius import autoclass, cast
+            Intent = autoclass('android.content.Intent')
+            Uri = autoclass('android.net.Uri')
+            String = autoclass('java.lang.String')
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+
+            uri = Uri.parse(uri_string)
+
+            intent = Intent(Intent.ACTION_SEND)
+            intent.setType('application/pdf')
+            intent.putExtra(Intent.EXTRA_STREAM, uri)
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
+            title = cast('java.lang.CharSequence', String('Report teilen via'))
+            chooser = Intent.createChooser(intent, title)
+            PythonActivity.mActivity.startActivity(chooser)
+        except Exception as e:
+            import traceback
+            error_msg = f"Fehler beim Teilen: {str(e)}\n\n{traceback.format_exc()}"
+            self.show_error('Fehler', error_msg)
+            self.write_error_log(error_msg)
 
     def load_customers(self):
         path = self.get_db_path()
@@ -632,7 +717,8 @@ class RootWidget(BoxLayout):
         try:
             out_dir = self.get_documents_dir()
             os.makedirs(out_dir, exist_ok=True)
-            filename = os.path.join(out_dir, f"report_{selected_customer.replace(' ', '_')}.pdf")
+            base_name = f"report_{selected_customer.replace(' ', '_')}.pdf"
+            temp_path = os.path.join(out_dir, base_name)
 
             pdf = FPDF("P", "mm", "A4")
             pdf.add_page()
@@ -704,10 +790,13 @@ class RootWidget(BoxLayout):
             pdf.set_font("Arial", "B", 12)
             pdf.cell(0, 10, f"Gesamtstunden: {grand_total:.2f}", ln=1)
 
-            pdf.output(filename)
+            pdf.output(temp_path)
 
-            # Show PDF in-app with Share button
-            self.show_pdf_viewer(filename, selected_customer)
+            # Attempt to place into public Documents/Zeiterfassung via MediaStore
+            display_path, share_uri_str = self.save_pdf_to_public_documents(temp_path, base_name)
+
+            # Show PDF location with optional share button
+            self.show_pdf_viewer(display_path, selected_customer, share_uri_str)
 
         except Exception as e:
             import traceback
