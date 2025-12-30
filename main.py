@@ -325,7 +325,7 @@ class RootWidget(BoxLayout):
         return temp_path, None
 
     def show_pdf_viewer(self, filepath_display, customer_name, share_uri_str=None):
-        # Show PDF creation success message (no MediaStore sharing)
+        # Show PDF creation success message with option to open
         from kivy.uix.popup import Popup
         from kivy.uix.label import Label
         from kivy.uix.button import Button
@@ -343,31 +343,60 @@ class RootWidget(BoxLayout):
             height='30dp'
         ))
         content.add_widget(Label(
-            text=f'Pfad: {os.path.dirname(filepath_display)}',
+            text='Datei wurde gespeichert.',
             size_hint_y=None,
-            height='40dp',
-            markup=True
+            height='30dp'
         ))
         content.add_widget(Label(
-            text=f'Datei: {os.path.basename(filepath_display)}',
+            text='Klicke "Öffnen" um die PDF zu teilen.',
             size_hint_y=None,
-            height='40dp',
-            markup=True
+            height='40dp'
         ))
-        content.add_widget(Label(
-            text='Datei im Ordner gespeichert - öffne im Datei-Manager zum Teilen',
-            size_hint_y=None,
-            height='50dp'
-        ))
-        close_btn = Button(text='✓ OK', size_hint_y=None, height='50dp')
-        content.add_widget(close_btn)
-        popup = Popup(title='Report erstellt', content=content, size_hint=(.9, .6))
+
+        btn_box = BoxLayout(size_hint_y=None, height='50dp', spacing=8)
+        open_btn = Button(text='🔍 Öffnen')
+        close_btn = Button(text='✓ OK')
+        btn_box.add_widget(open_btn)
+        btn_box.add_widget(close_btn)
+        content.add_widget(btn_box)
+
+        popup = Popup(title='Report erstellt', content=content, size_hint=(.9, .5))
+
+        def do_open(*_):
+            self.open_pdf(filepath_display)
+            popup.dismiss()
+
+        open_btn.bind(on_release=do_open)
         close_btn.bind(on_release=popup.dismiss)
         popup.open()
 
     def share_pdf_fileprovider(self, filepath):
         # Deprecated placeholder; share_pdf is used instead
         return
+
+    def open_pdf(self, filepath):
+        """Open PDF with default PDF viewer (for sharing)."""
+        try:
+            from jnius import autoclass
+            Intent = autoclass('android.content.Intent')
+            Uri = autoclass('android.net.Uri')
+            File = autoclass('java.io.File')
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+
+            java_file = File(filepath)
+            uri = Uri.fromFile(java_file)
+
+            intent = Intent(Intent.ACTION_VIEW)
+            intent.setDataAndType(uri, 'application/pdf')
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
+            PythonActivity.mActivity.startActivity(intent)
+        except Exception as e:
+            import traceback
+            error_msg = f"Fehler beim Öffnen: {str(e)}\n\n{traceback.format_exc()}"
+            self.show_error('Fehler', error_msg)
+            self.write_error_log(error_msg)
 
     def get_downloads_dir(self):
         # Try Android public Downloads directory; fallback to OS Downloads or app data
