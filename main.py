@@ -321,7 +321,7 @@ class RootWidget(BoxLayout):
             return self.get_db_dir()
 
     def save_pdf_to_public_documents(self, temp_path, base_filename):
-        """Try to place the PDF into public Documents/Zeiterfassung via MediaStore (Android 10+).
+        """Try to place the PDF into public Downloads/Zeiterfassung via MediaStore (Android 10+).
         Returns (display_path_str, uri_string_or_None).
         """
         try:
@@ -335,18 +335,22 @@ class RootWidget(BoxLayout):
             context = PythonActivity.mActivity
             resolver = context.getContentResolver()
 
+            # Use Downloads collection (publicly visible)
             collection = MediaStore.Downloads.getContentUri("external")
             values = ContentValues()
             values.put(MediaStore.MediaColumns.DISPLAY_NAME, base_filename)
             values.put(MediaStore.MediaColumns.MIME_TYPE, 'application/pdf')
-            values.put(MediaStore.MediaColumns.RELATIVE_PATH, 'Documents/Zeiterfassung')
+            values.put(MediaStore.MediaColumns.RELATIVE_PATH, 'Download/Zeiterfassung')
 
             uri = resolver.insert(collection, values)
+            print(f"MediaStore URI: {uri}")
+            
             if uri is not None:
                 inp = open(temp_path, 'rb')
                 out = resolver.openOutputStream(uri)
                 try:
                     shutil.copyfileobj(inp, out)
+                    print(f"PDF copied to MediaStore successfully")
                 finally:
                     try:
                         out.close()
@@ -357,9 +361,14 @@ class RootWidget(BoxLayout):
                     except Exception:
                         pass
                 # Return user-facing relative path and sharable content Uri string
-                return os.path.join('Dokumente/Zeiterfassung', base_filename), str(uri)
+                return os.path.join('Download/Zeiterfassung', base_filename), str(uri)
+            else:
+                print("MediaStore URI is None - insert failed")
         except Exception as e:
-            print(f"MediaStore write failed: {e}")
+            import traceback
+            error_msg = f"MediaStore write failed: {str(e)}\n{traceback.format_exc()}"
+            print(error_msg)
+            self.show_error('MediaStore Fehler', error_msg)
 
         # Fallback: keep temp_path (app-specific)
         return temp_path, None
@@ -418,7 +427,7 @@ class RootWidget(BoxLayout):
             popup.open()
         else:
             content.add_widget(Label(
-                text='Öffne Datei-Manager → Dokumente/Zeiterfassung → PDF → Teilen',
+                text='Datei im App-Ordner gespeichert - öffne im Datei-Manager zum Teilen',
                 size_hint_y=None,
                 height='50dp'
             ))
@@ -800,9 +809,13 @@ class RootWidget(BoxLayout):
             # Attempt to place into public Documents/Zeiterfassung via MediaStore
             display_path, share_uri_str = self.save_pdf_to_public_documents(temp_path, base_name)
 
-            if auto_share and share_uri_str:
-                # Directly open share sheet
-                self.share_pdf(share_uri_str)
+            if auto_share:
+                if share_uri_str:
+                    # Directly open share sheet
+                    self.share_pdf(share_uri_str)
+                else:
+                    # Show error if MediaStore failed
+                    self.show_error('Fehler', 'PDF konnte nicht im öffentlichen Ordner gespeichert werden. Bitte nutze "Report (PDF)" und teile manuell.')
             else:
                 # Show PDF location with optional share button
                 self.show_pdf_viewer(display_path, selected_customer, share_uri_str)
