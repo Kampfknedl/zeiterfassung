@@ -396,6 +396,7 @@ class RootWidget(BoxLayout):
             Intent = autoclass('android.content.Intent')
             Uri = autoclass('android.net.Uri')
             File = autoclass('java.io.File')
+            String = autoclass('java.lang.String')
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
 
             java_file = File(filepath)
@@ -409,7 +410,9 @@ class RootWidget(BoxLayout):
             intent.putExtra(Intent.EXTRA_STREAM, parcelable_uri)
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
 
-            chooser = Intent.createChooser(intent, 'Report teilen via')
+            # Cast title to CharSequence for createChooser
+            title = cast('java.lang.CharSequence', String('Report teilen via'))
+            chooser = Intent.createChooser(intent, title)
             PythonActivity.mActivity.startActivity(chooser)
         except Exception as e:
             import traceback
