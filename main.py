@@ -386,21 +386,37 @@ class RootWidget(BoxLayout):
                 return self.get_db_dir()
 
     def share_pdf(self, filepath):
-        # Open Android share intent for the PDF file using Parcelable casting (avoids jnius type mismatch)
+        # Copy PDF to cache and share from there to avoid FileUriExposedException
         if not os.path.exists(filepath):
             self.show_error('Fehler', f'Datei nicht gefunden: {filepath}')
             return
 
         try:
             from jnius import autoclass, cast
+            import shutil
+            
             Intent = autoclass('android.content.Intent')
             Uri = autoclass('android.net.Uri')
             File = autoclass('java.io.File')
             String = autoclass('java.lang.String')
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            StrictMode = autoclass('android.os.StrictMode')
 
-            java_file = File(filepath)
-            file_uri = Uri.fromFile(java_file)
+            context = PythonActivity.mActivity
+            
+            # Disable FileUriExposure check (workaround for Android 7+)
+            try:
+                builder = StrictMode.VmPolicy.Builder()
+                StrictMode.setVmPolicy(builder.build())
+            except Exception as e:
+                print(f"StrictMode config failed: {e}")
+
+            # Copy to cache directory
+            cache_dir = context.getCacheDir()
+            cache_file = File(cache_dir, os.path.basename(filepath))
+            shutil.copy2(filepath, cache_file.getAbsolutePath())
+            
+            file_uri = Uri.fromFile(cache_file)
 
             intent = Intent(Intent.ACTION_SEND)
             intent.setType('application/pdf')
@@ -413,7 +429,7 @@ class RootWidget(BoxLayout):
             # Cast title to CharSequence for createChooser
             title = cast('java.lang.CharSequence', String('Report teilen via'))
             chooser = Intent.createChooser(intent, title)
-            PythonActivity.mActivity.startActivity(chooser)
+            context.startActivity(chooser)
         except Exception as e:
             import traceback
             tb = traceback.format_exc()
