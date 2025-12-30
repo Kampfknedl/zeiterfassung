@@ -336,33 +336,37 @@ class RootWidget(BoxLayout):
             Uri = autoclass('android.net.Uri')
             File = autoclass('java.io.File')
             
-            # Create File object from filepath
+            # Create File object
             java_file = File(filepath)
             
-            # Try to use FileProvider for secure sharing (Android 7+)
+            # Try FileProvider first (Android 7+)
+            file_uri = None
             try:
                 FileProvider = autoclass('androidx.core.content.FileProvider')
                 context = PythonJavaClass.mActivity
                 authority = f"{context.getPackageName()}.fileprovider"
-                # FileProvider.getUriForFile returns android.net.Uri
                 file_uri = FileProvider.getUriForFile(context, authority, java_file)
+                print(f"FileProvider Uri: {file_uri}")
             except Exception as e:
-                # Fallback to direct file:// URI for older Android
-                print(f"FileProvider failed ({e}), using direct file URI")
+                print(f"FileProvider failed: {e}")
+                file_uri = None
+            
+            # Fallback: direct file Uri
+            if file_uri is None:
                 file_uri = Uri.fromFile(java_file)
+                print(f"Using direct file Uri: {file_uri}")
 
             # Create share intent
-            intent = Intent()
-            intent.setAction(Intent.ACTION_SEND)
-            
-            # Ensure file_uri is properly passed as Parcelable
-            Parcelable = autoclass('android.os.Parcelable')
-            intent.putExtra(Intent.EXTRA_STREAM, file_uri)
+            intent = Intent(Intent.ACTION_SEND)
             intent.setType("application/pdf")
+            
+            # Add the Uri as EXTRA_STREAM - use the method signature that works
+            # Pass uri as android.os.Parcelable
+            intent.putExtra("android.intent.extra.STREAM", file_uri)
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
 
-            # Start share intent chooser (shows WhatsApp, Email, etc.)
-            chooser = Intent.createChooser(intent, "Report teilen via...")
+            # Start chooser
+            chooser = Intent.createChooser(intent, "Report teilen via")
             PythonJavaClass.mActivity.startActivity(chooser)
         except Exception as e:
             import traceback
