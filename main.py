@@ -325,7 +325,7 @@ class RootWidget(BoxLayout):
         return temp_path, None
 
     def show_pdf_viewer(self, filepath_display, customer_name, share_uri_str=None):
-        # Show PDF creation success message with option to open
+        # Show PDF creation success message with sharing option
         from kivy.uix.popup import Popup
         from kivy.uix.label import Label
         from kivy.uix.button import Button
@@ -343,29 +343,34 @@ class RootWidget(BoxLayout):
             height='30dp'
         ))
         content.add_widget(Label(
-            text='Datei wurde gespeichert.',
+            text='Datei wurde erfolgreich gespeichert.',
             size_hint_y=None,
             height='30dp'
         ))
-        content.add_widget(Label(
-            text='Klicke "Öffnen" um die PDF zu teilen.',
-            size_hint_y=None,
-            height='40dp'
-        ))
 
         btn_box = BoxLayout(size_hint_y=None, height='50dp', spacing=8)
+        share_btn = Button(text='📤 Teilen')
         open_btn = Button(text='🔍 Öffnen')
         close_btn = Button(text='✓ OK')
+        btn_box.add_widget(share_btn)
         btn_box.add_widget(open_btn)
         btn_box.add_widget(close_btn)
         content.add_widget(btn_box)
 
         popup = Popup(title='Report erstellt', content=content, size_hint=(.9, .5))
 
+        def do_share(*_):
+            success = self.share_pdf_fileprovider(filepath_display)
+            if success:
+                popup.dismiss()
+            else:
+                self.show_error('Fehler', 'PDF konnte nicht geteilt werden')
+
         def do_open(*_):
             self.open_pdf(filepath_display)
             popup.dismiss()
 
+        share_btn.bind(on_release=do_share)
         open_btn.bind(on_release=do_open)
         close_btn.bind(on_release=popup.dismiss)
         popup.open()
@@ -411,8 +416,47 @@ class RootWidget(BoxLayout):
             except Exception:
                 return self.get_db_dir()
 
+    def share_pdf_fileprovider(self, filepath):
+        """Share a PDF file using Android FileProvider (API 24+)"""
+        try:
+            from jnius import autoclass, cast
+            Intent = autoclass('android.content.Intent')
+            Uri = autoclass('android.net.Uri')
+            File = autoclass('java.io.File')
+            String = autoclass('java.lang.String')
+            FileProvider = autoclass('androidx.core.content.FileProvider')
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            Build = autoclass('android.os.Build')
+
+            context = PythonActivity.mActivity
+
+            # Create file object
+            java_file = File(filepath)
+
+            # Use FileProvider for URI (safer, works with API 24+)
+            authority = "org.tkideneb.zeiterfassung.fileprovider"
+            uri = FileProvider.getUriForFile(context, authority, java_file)
+
+            # Create SEND intent
+            intent = Intent(Intent.ACTION_SEND)
+            intent.setType('application/pdf')
+            intent.putExtra(Intent.EXTRA_STREAM, uri)
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
+            # Create chooser
+            title = cast('java.lang.CharSequence', String('Report teilen via'))
+            chooser = Intent.createChooser(intent, title)
+            context.startActivity(chooser)
+            
+            return True
+        except Exception as e:
+            import traceback
+            print(f"FileProvider share failed: {e}")
+            print(traceback.format_exc())
+            return False
+
     def share_pdf(self, uri_string):
-        # Share a content Uri (from MediaStore insert) via Android share sheet
+        # Legacy: Share a content Uri via Android share sheet
         try:
             from jnius import autoclass, cast
             Intent = autoclass('android.content.Intent')
@@ -763,14 +807,19 @@ class RootWidget(BoxLayout):
 
             pdf.output(temp_path)
 
-            # No MediaStore: keep file on filesystem
-            display_path = temp_path
-
+            # Show popup with share option
             if auto_share:
-                # No auto-share without MediaStore; inform user
-                self.show_pdf_viewer(display_path, selected_customer, None)
+                # Automatically trigger share after showing success
+                self.show_pdf_viewer(temp_path, selected_customer, None)
+                # On Android, immediately start sharing
+                try:
+                    import sys
+                    if 'android' in sys.modules or hasattr(sys, 'platform'):
+                        self.share_pdf_fileprovider(temp_path)
+                except Exception:
+                    pass
             else:
-                self.show_pdf_viewer(display_path, selected_customer, None)
+                self.show_pdf_viewer(temp_path, selected_customer, None)
 
         except Exception as e:
             import traceback

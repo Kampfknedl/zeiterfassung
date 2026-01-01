@@ -31,10 +31,13 @@ Falls du einen neuen Build manuell starten möchtest:
 
 ## 📱 Features
 
-- ✅ Kundenverwaltung
+- ✅ Kundenverwaltung mit Kontaktdaten
 - ✅ Stundenerfassung mit Datum
 - ✅ PDF-Export für Reports
-- ✅ Android 7+ Support (FileProvider)
+- ✅ **Direktes PDF-Sharing via Email, WhatsApp, Google Drive etc.**
+- ✅ Automatische Monatszusammenstellung
+- ✅ Timer-Funktion für Stundentracking
+- ✅ Android 5+ Support (FileProvider API 24+)
 
 ## 🛠 Lokale Entwicklung
 
@@ -73,7 +76,43 @@ Die fertige APK findest du in `bin/`.
 
 ---
 
-## 📁 Projektstruktur
+## � PDF-Sharing Funktion
+
+Die Anwendung unterstützt direktes PDF-Sharing ohne zusätzliche Schritte:
+
+### Verwendung
+
+1. **Wähle einen Kunden** aus dem Dropdown-Menü
+2. **Klick auf "Report (PDF)"** oder **"Report + Teilen"**
+3. **PDF wird erzeugt** und dir wird ein Dialog angezeigt
+4. **Klick auf "📤 Teilen"** um die PDF direkt zu teilen via:
+   - Email
+   - WhatsApp
+   - Google Drive
+   - OneDrive
+   - Telegram
+   - oder jede andere Sharing-App auf dem Gerät
+
+### Technische Details
+
+- **FileProvider**: Nutzt `androidx.core.content.FileProvider` für sichere PDF-Freigabe (API 24+)
+- **Speicherort**: Dateien werden in `Android/data/<app>/files/Documents/` gespeichert
+- **Automatisches Sharing**: Der Button "Report + Teilen" öffnet direkt den Share-Dialog
+- **Fallback**: Desktop-Version speichert PDFs in `~/Documents/Zeiterfassung/`
+
+### Konfiguration (buildozer.spec)
+
+Die FileProvider-Konfiguration ist bereits eingerichtet:
+
+```ini
+android.add_resources = res
+android.gradle_dependencies = androidx.core:core:1.9.0
+android.manifest_additions = <provider android:name="androidx.core.content.FileProvider" .../>
+```
+
+---
+
+## �📁 Projektstruktur
 
 ```
 .
