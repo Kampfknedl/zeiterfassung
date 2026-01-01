@@ -5,6 +5,7 @@ package.domain = org.tkideneb
 
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,db
+source.include_patterns = templates/*,res/*
 
 version = 1.0
 
@@ -24,7 +25,7 @@ orientation = portrait
 # Android FileProvider configuration for sharing PDFs
 android.add_resources = res
 android.gradle_dependencies = androidx.core:core:1.9.0
-android.manifest_additions = <provider android:name="androidx.core.content.FileProvider" android:authorities="org.tkideneb.zeiterfassung.fileprovider" android:exported="false"><meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/fileprovider_paths" /></provider>
+android.manifest = ./templates/AndroidManifest.tmpl.xml
 
 p4a.bootstrap = sdl2
 p4a.arch = arm64-v8a

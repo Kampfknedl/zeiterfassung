@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+      package="{{ args.package }}"
+      android:versionCode="{{ args.numeric_version }}"
+      android:versionName="{{ args.version }}"
+      android:installLocation="auto">
+
+    <uses-sdk android:minSdkVersion="{{ android_api }}" android:targetSdkVersion="{{ android_api }}" />
+
+    <!-- Permissions -->
+    {% for perm in args.permissions %}
+    <uses-permission android:name="android.permission.{{ perm }}" />
+    {% endfor %}
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/icon"
+        android:theme="@android:style/Theme.NoTitleBar"
+        android:hardwareAccelerated="true">
+
+        <activity android:name="org.kivy.android.PythonActivity"
+            android:label="@string/app_name"
+            android:configChanges="keyboardHidden|orientation|screenSize"
+            android:screenOrientation="{{ args.orientation }}">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- FileProvider for sharing PDFs -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="{{ args.package }}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/fileprovider_paths" />
+        </provider>
+
+    </application>
+
+</manifest>
