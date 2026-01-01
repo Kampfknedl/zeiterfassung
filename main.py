@@ -417,25 +417,22 @@ class RootWidget(BoxLayout):
                 return self.get_db_dir()
 
     def share_pdf_fileprovider(self, filepath):
-        """Share a PDF file using Android FileProvider (API 24+)"""
+        """Share a PDF file using simple file:// URI (Android 6 and below compatible)"""
         try:
             from jnius import autoclass, cast
             Intent = autoclass('android.content.Intent')
             Uri = autoclass('android.net.Uri')
             File = autoclass('java.io.File')
             String = autoclass('java.lang.String')
-            FileProvider = autoclass('androidx.core.content.FileProvider')
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            Build = autoclass('android.os.Build')
 
             context = PythonActivity.mActivity
 
             # Create file object
             java_file = File(filepath)
-
-            # Use FileProvider for URI (safer, works with API 24+)
-            authority = "org.tkideneb.zeiterfassung.fileprovider"
-            uri = FileProvider.getUriForFile(context, authority, java_file)
+            
+            # Use simple file:// URI (works on most devices)
+            uri = Uri.fromFile(java_file)
 
             # Create SEND intent
             intent = Intent(Intent.ACTION_SEND)
@@ -451,9 +448,14 @@ class RootWidget(BoxLayout):
             return True
         except Exception as e:
             import traceback
-            print(f"FileProvider share failed: {e}")
+            print(f"Share failed: {e}")
             print(traceback.format_exc())
-            return False
+            # Try fallback to system share
+            try:
+                self.open_pdf(filepath)
+                return True
+            except Exception:
+                return False
 
     def share_pdf(self, uri_string):
         # Legacy: Share a content Uri via Android share sheet
