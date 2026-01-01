@@ -22,6 +22,10 @@ android.skip_update = False
 orientation = portrait
 
 # Android FileProvider configuration for sharing PDFs
+android.add_resources = res
+android.gradle_dependencies = androidx.core:core:1.9.0
+
+p4a.bootstrap = sdl2
 p4a.arch = arm64-v8a
 p4a.ndk_api = 21
 

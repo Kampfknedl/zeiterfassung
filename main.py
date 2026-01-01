@@ -389,7 +389,15 @@ class RootWidget(BoxLayout):
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
 
             java_file = File(filepath)
-            uri = Uri.fromFile(java_file)
+            
+            # Try FileProvider first (Android 7+)
+            try:
+                FileProvider = autoclass('androidx.core.content.FileProvider')
+                authority = "org.tkideneb.zeiterfassung.fileprovider"
+                uri = FileProvider.getUriForFile(PythonActivity.mActivity, authority, java_file)
+            except Exception:
+                # Fallback to file:// URI for older devices
+                uri = Uri.fromFile(java_file)
 
             intent = Intent(Intent.ACTION_VIEW)
             intent.setDataAndType(uri, 'application/pdf')
@@ -417,7 +425,7 @@ class RootWidget(BoxLayout):
                 return self.get_db_dir()
 
     def share_pdf_fileprovider(self, filepath):
-        """Share a PDF file using simple file:// URI (Android 6 and below compatible)"""
+        """Share a PDF file using Android FileProvider (Android 7+) with fallback"""
         try:
             from jnius import autoclass, cast
             Intent = autoclass('android.content.Intent')
@@ -427,12 +435,16 @@ class RootWidget(BoxLayout):
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
 
             context = PythonActivity.mActivity
-
-            # Create file object
             java_file = File(filepath)
             
-            # Use simple file:// URI (works on most devices)
-            uri = Uri.fromFile(java_file)
+            # Try FileProvider first (Android 7+, more secure)
+            try:
+                FileProvider = autoclass('androidx.core.content.FileProvider')
+                authority = "org.tkideneb.zeiterfassung.fileprovider"
+                uri = FileProvider.getUriForFile(context, authority, java_file)
+            except Exception:
+                # Fallback to file:// URI for Android 6 and below
+                uri = Uri.fromFile(java_file)
 
             # Create SEND intent
             intent = Intent(Intent.ACTION_SEND)
@@ -450,12 +462,7 @@ class RootWidget(BoxLayout):
             import traceback
             print(f"Share failed: {e}")
             print(traceback.format_exc())
-            # Try fallback to system share
-            try:
-                self.open_pdf(filepath)
-                return True
-            except Exception:
-                return False
+            return False
 
     def share_pdf(self, uri_string):
         # Legacy: Share a content Uri via Android share sheet
