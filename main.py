@@ -90,15 +90,15 @@ RootWidget:
         height: '120dp'
         spacing: 4
         Button:
-            text: 'Report (PDF)'
+            text: 'Report (CSV)'
             size_hint_y: None
             height: '40dp'
-            on_release: root.export_pdf()
+            on_release: root.export_csv()
         Button:
-            text: 'Report + Teilen'
+            text: 'Report + Teilen (CSV)'
             size_hint_y: None
             height: '40dp'
-            on_release: root.export_pdf(auto_share=True)
+            on_release: root.export_csv(auto_share=True)
         BoxLayout:
             size_hint_y: None
             height: '40dp'
@@ -324,26 +324,26 @@ class RootWidget(BoxLayout):
         """Deprecated: MediaStore path handling caused compatibility issues."""
         return temp_path, None
 
-    def show_pdf_viewer(self, filepath_display, customer_name, share_uri_str=None):
-        # Show PDF creation success message with sharing option
+    def show_file_viewer(self, filepath_display, customer_name, mime_type='text/csv', auto_share=False):
+        # Show creation success message with sharing option
         from kivy.uix.popup import Popup
         from kivy.uix.label import Label
         from kivy.uix.button import Button
 
         content = BoxLayout(orientation='vertical', spacing=8, padding=10)
         content.add_widget(Label(
-            text='✓ Report erstellt!',
+            text='✓ CSV erstellt!',
             size_hint_y=None,
             height='40dp',
             font_size='16sp'
         ))
         content.add_widget(Label(
-            text=f'Customer: {customer_name}',
+            text=f'Kunde: {customer_name}',
             size_hint_y=None,
             height='30dp'
         ))
         content.add_widget(Label(
-            text='Datei wurde erfolgreich gespeichert.',
+            text='CSV wurde erfolgreich gespeichert.',
             size_hint_y=None,
             height='30dp'
         ))
@@ -351,7 +351,7 @@ class RootWidget(BoxLayout):
         btn_box = BoxLayout(size_hint_y=None, height='50dp', spacing=8)
         share_btn = Button(text='📤 Teilen')
         open_btn = Button(text='🔍 Öffnen')
-        close_btn = Button(text='✓ OK')
+        close_btn = Button(text='✓ Schließen')
         btn_box.add_widget(share_btn)
         btn_box.add_widget(open_btn)
         btn_box.add_widget(close_btn)
@@ -360,14 +360,14 @@ class RootWidget(BoxLayout):
         popup = Popup(title='Report erstellt', content=content, size_hint=(.9, .5))
 
         def do_share(*_):
-            success = self.share_pdf_fileprovider(filepath_display)
+            success = self.share_file_fileprovider(filepath_display, mime_type=mime_type)
             if success:
                 popup.dismiss()
             else:
-                self.show_error('Fehler', 'PDF konnte nicht geteilt werden')
+                self.show_error('Fehler', 'Datei konnte nicht geteilt werden')
 
         def do_open(*_):
-            self.open_pdf(filepath_display)
+            self.open_file(filepath_display, mime_type=mime_type)
             popup.dismiss()
 
         share_btn.bind(on_release=do_share)
@@ -375,12 +375,14 @@ class RootWidget(BoxLayout):
         close_btn.bind(on_release=popup.dismiss)
         popup.open()
 
-    def share_pdf_fileprovider(self, filepath):
-        # Deprecated placeholder; share_pdf is used instead
-        return
+        if auto_share:
+            try:
+                do_share()
+            except Exception:
+                pass
 
-    def open_pdf(self, filepath):
-        """Open PDF with default PDF viewer (for sharing)."""
+    def open_file(self, filepath, mime_type='text/csv'):
+        """Open a file with default viewer (for sharing)."""
         try:
             from jnius import autoclass
             Intent = autoclass('android.content.Intent')
@@ -400,7 +402,7 @@ class RootWidget(BoxLayout):
                 uri = Uri.fromFile(java_file)
 
             intent = Intent(Intent.ACTION_VIEW)
-            intent.setDataAndType(uri, 'application/pdf')
+            intent.setDataAndType(uri, mime_type)
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
 
@@ -424,8 +426,8 @@ class RootWidget(BoxLayout):
             except Exception:
                 return self.get_db_dir()
 
-    def share_pdf_fileprovider(self, filepath):
-        """Share a PDF file using Android FileProvider (Android 7+) with fallback"""
+    def share_file_fileprovider(self, filepath, mime_type='text/csv'):
+        """Share a file using Android FileProvider (Android 7+) with fallback."""
         try:
             from jnius import autoclass, cast
             Intent = autoclass('android.content.Intent')
@@ -448,7 +450,7 @@ class RootWidget(BoxLayout):
 
             # Create SEND intent
             intent = Intent(Intent.ACTION_SEND)
-            intent.setType('application/pdf')
+            intent.setType(mime_type)
             intent.putExtra(Intent.EXTRA_STREAM, uri)
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
 
@@ -465,24 +467,9 @@ class RootWidget(BoxLayout):
             return False
 
     def share_pdf(self, uri_string):
-        # Legacy: Share a content Uri via Android share sheet
+        # Legacy: still route to generic share for compatibility
         try:
-            from jnius import autoclass, cast
-            Intent = autoclass('android.content.Intent')
-            Uri = autoclass('android.net.Uri')
-            String = autoclass('java.lang.String')
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-
-            uri = Uri.parse(uri_string)
-
-            intent = Intent(Intent.ACTION_SEND)
-            intent.setType('application/pdf')
-            intent.putExtra(Intent.EXTRA_STREAM, uri)
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-
-            title = cast('java.lang.CharSequence', String('Report teilen via'))
-            chooser = Intent.createChooser(intent, title)
-            PythonActivity.mActivity.startActivity(chooser)
+            return self.share_file_fileprovider(uri_string, mime_type='text/csv')
         except Exception as e:
             import traceback
             error_msg = f"Fehler beim Teilen: {str(e)}\n\n{traceback.format_exc()}"
@@ -725,116 +712,79 @@ class RootWidget(BoxLayout):
         Popup(title='Erfasst', content=Label(text=f'Erfasst: {billed:.2f} Std (aufgerundet)'), size_hint=(.7, .3)).open()
         self.refresh_entries()
 
-    def export_pdf(self, auto_share=False):
-        # Export PDF using pure-Python pyfpdf (no fontTools, no C extensions)
+    def export_csv(self, auto_share=False):
         selected_customer = self.ids.customer_spinner.text
         if not selected_customer or selected_customer == '—':
             self.show_error('Fehler', 'Bitte Kunde auswählen')
             return
 
-        try:
-            from fpdf import FPDF  # pyfpdf 1.7.x (pure Python)
-        except Exception as e:
-            self.show_error('PDF-Fehler', f'PDF-Bibliothek fehlt: {e}')
+        rows = db.get_entries(self.get_db_path(), selected_customer)
+        if not rows:
+            from kivy.uix.popup import Popup
+            from kivy.uix.label import Label
+            Popup(title='Info', content=Label(text='Keine Einträge für den ausgewählten Kunden'), size_hint=(.6, .3)).open()
             return
 
         try:
+            import csv
+            from collections import defaultdict
+
             out_dir = self.get_documents_dir()
             os.makedirs(out_dir, exist_ok=True)
-            base_name = f"report_{selected_customer.replace(' ', '_')}.pdf"
+            base_name = f"report_{selected_customer.replace(' ', '_')}.csv"
             temp_path = os.path.join(out_dir, base_name)
 
-            pdf = FPDF("P", "mm", "A4")
-            pdf.add_page()
-            pdf.set_auto_page_break(auto=True, margin=15)
-
-            # Header
-            pdf.set_font("Arial", "B", 16)
-            safe_customer = selected_customer.encode('latin-1', 'replace').decode('latin-1')
-            pdf.cell(0, 10, f"Report fuer: {safe_customer}", ln=1)
-
-            cust = db.get_customer(self.get_db_path(), selected_customer)
-            pdf.set_font("Arial", size=10)
-            if cust and cust[2]:
-                pdf.cell(0, 6, f"Adresse: {cust[2].encode('latin-1','replace').decode('latin-1')}", ln=1)
-            if cust and cust[3]:
-                pdf.cell(0, 6, f"Email: {cust[3].encode('latin-1','replace').decode('latin-1')}", ln=1)
-            if cust and cust[4]:
-                pdf.cell(0, 6, f"Telefon: {cust[4].encode('latin-1','replace').decode('latin-1')}", ln=1)
-            pdf.ln(4)
-
-            rows = db.get_entries(self.get_db_path(), selected_customer)
-            if not rows:
-                from kivy.uix.popup import Popup
-                from kivy.uix.label import Label
-                Popup(title='Info', content=Label(text='Keine Einträge für den ausgewählten Kunden'), size_hint=(.6, .3)).open()
-                return
-
-            # Group entries by month
-            from collections import defaultdict
             months_data = defaultdict(list)
             for r in rows:
                 date_str = (r[3] or '')[:10]
-                try:
-                    month_key = date_str[:7]
-                except Exception:
-                    month_key = "Undatiert"
+                month_key = date_str[:7] if date_str else "Undatiert"
                 months_data[month_key].append(r)
 
             sorted_months = sorted(months_data.keys(), reverse=True)
             grand_total = 0.0
 
-            for month_key in sorted_months:
-                rows_in_month = months_data[month_key]
-                month_total = 0.0
+            with open(temp_path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f, delimiter=';')
+                writer.writerow(['Kunde', selected_customer])
+                writer.writerow(['Erstellt am', datetime.datetime.now().isoformat(timespec='seconds')])
+                cust = db.get_customer(self.get_db_path(), selected_customer)
+                if cust and cust[2]:
+                    writer.writerow(['Adresse', cust[2]])
+                if cust and cust[3]:
+                    writer.writerow(['Email', cust[3]])
+                if cust and cust[4]:
+                    writer.writerow(['Telefon', cust[4]])
+                writer.writerow([])
+                writer.writerow(['Monat', 'Datum', 'Tätigkeit', 'Stunden'])
 
-                pdf.set_font("Arial", "B", 12)
-                pdf.cell(0, 10, f"Monat: {month_key}", ln=1)
+                for month_key in sorted_months:
+                    rows_in_month = months_data[month_key]
+                    month_total = 0.0
 
-                pdf.set_font("Arial", "B", 10)
-                pdf.cell(100, 7, "Tätigkeit", border=1)
-                pdf.cell(40, 7, "Datum", border=1)
-                pdf.cell(30, 7, "Stunden", border=1, ln=1)
+                    for r in rows_in_month:
+                        date = (r[3] or '')[:10]
+                        act = r[2] or ''
+                        hrs = float(r[5] or 0)
+                        writer.writerow([month_key, date, act, f"{hrs:.2f}"])
+                        month_total += hrs
 
-                pdf.set_font("Arial", size=9)
-                for r in rows_in_month:
-                    act = (r[2] or '')[:60].encode('latin-1', 'replace').decode('latin-1')
-                    date = (r[3] or '')[:10]
-                    hrs = float(r[5] or 0)
-                    pdf.cell(100, 7, act, border=1)
-                    pdf.cell(40, 7, date, border=1)
-                    pdf.cell(30, 7, f"{hrs:.2f}", border=1, ln=1)
-                    month_total += hrs
+                    writer.writerow([month_key, '', 'Monatssumme', f"{month_total:.2f}"])
+                    writer.writerow([])
+                    grand_total += month_total
 
-                pdf.set_font("Arial", "B", 10)
-                pdf.cell(140, 7, f"Monatssumme: {month_total:.2f}", border=1, ln=1)
-                grand_total += month_total
-                pdf.ln(4)
+                writer.writerow(['', '', 'Gesamtstunden', f"{grand_total:.2f}"])
 
-            pdf.set_font("Arial", "B", 12)
-            pdf.cell(0, 10, f"Gesamtstunden: {grand_total:.2f}", ln=1)
-
-            pdf.output(temp_path)
-
-            # Show popup with share option
-            if auto_share:
-                # Automatically trigger share after showing success
-                self.show_pdf_viewer(temp_path, selected_customer, None)
-                # On Android, immediately start sharing
-                try:
-                    import sys
-                    if 'android' in sys.modules or hasattr(sys, 'platform'):
-                        self.share_pdf_fileprovider(temp_path)
-                except Exception:
-                    pass
-            else:
-                self.show_pdf_viewer(temp_path, selected_customer, None)
+            self.show_file_viewer(temp_path, selected_customer, mime_type='text/csv', auto_share=auto_share)
 
         except Exception as e:
             import traceback
-            error_msg = f"Fehler beim PDF-Export:\n{str(e)}\n\n{traceback.format_exc()}"
-            self.show_error('PDF-Fehler', error_msg)
+            error_msg = f"Fehler beim CSV-Export:\n{str(e)}\n\n{traceback.format_exc()}"
+            self.show_error('CSV-Fehler', error_msg)
             self.write_error_log(error_msg)
+
+    def export_pdf(self, auto_share=False):
+        # Backward compatibility: keep old name but use CSV export
+        return self.export_csv(auto_share=auto_share)
 
     def refresh_entries(self):
         # ensure UI has been built and ids available
