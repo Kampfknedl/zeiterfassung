@@ -1,0 +1,227 @@
+<MainScreen>:
+    name: 'main'
+    md_bg_color: app.theme_cls.bg_normal
+    
+    MDBoxLayout:
+        orientation: 'vertical'
+        padding: dp(10)
+        spacing: dp(10)
+        
+        # Top bar
+        MDTopAppBar:
+            title: "Zeiterfassung"
+            elevation: 2
+            md_bg_color: app.theme_cls.primary_color
+            left_action_items: [["menu", lambda x: None]]
+            right_action_items: [["file-pdf-box", lambda x: root.export_pdf(auto_share=True)]]
+        
+        MDScrollView:
+            do_scroll_x: False
+            
+            MDBoxLayout:
+                orientation: 'vertical'
+                adaptive_height: True
+                padding: dp(10)
+                spacing: dp(15)
+                
+                # Customer selection card
+                MDCard:
+                    orientation: 'vertical'
+                    padding: dp(15)
+                    spacing: dp(10)
+                    size_hint_y: None
+                    height: dp(200)
+                    elevation: 2
+                    
+                    MDLabel:
+                        text: "Kunde"
+                        font_style: "H6"
+                        size_hint_y: None
+                        height: dp(30)
+                    
+                    MDRaisedButton:
+                        id: customer_btn
+                        text: root.selected_customer
+                        size_hint_y: None
+                        height: dp(48)
+                        on_release: root.show_customer_menu(self)
+                    
+                    MDBoxLayout:
+                        size_hint_y: None
+                        height: dp(48)
+                        spacing: dp(10)
+                        
+                        MDRaisedButton:
+                            text: "Neuer Kunde"
+                            on_release: root.show_add_customer_dialog()
+                        
+                        MDFlatButton:
+                            text: "Verwalten"
+                            on_release: root.show_customer_management()
+                
+                # Activity and timer card
+                MDCard:
+                    orientation: 'vertical'
+                    padding: dp(15)
+                    spacing: dp(10)
+                    size_hint_y: None
+                    height: dp(350)
+                    elevation: 2
+                    
+                    MDLabel:
+                        text: "Tätigkeit"
+                        font_style: "H6"
+                        size_hint_y: None
+                        height: dp(30)
+                    
+                    MDTextField:
+                        id: activity_input
+                        hint_text: "z.B. Programmierung, Meeting, etc."
+                        mode: "rectangle"
+                        size_hint_y: None
+                        height: dp(56)
+                    
+                    MDLabel:
+                        text: "Timer"
+                        font_style: "Subtitle1"
+                        size_hint_y: None
+                        height: dp(25)
+                    
+                    MDLabel:
+                        id: timer_label
+                        text: "00:00:00"
+                        halign: "center"
+                        font_style: "H4"
+                        size_hint_y: None
+                        height: dp(60)
+                    
+                    MDBoxLayout:
+                        size_hint_y: None
+                        height: dp(48)
+                        spacing: dp(10)
+                        
+                        MDRaisedButton:
+                            id: start_btn
+                            text: "START"
+                            md_bg_color: app.theme_cls.primary_color
+                            on_release: root.start_timer()
+                        
+                        MDRaisedButton:
+                            id: pause_btn
+                            text: "PAUSE"
+                            disabled: True
+                            on_release: root.pause_timer()
+                        
+                        MDRaisedButton:
+                            id: stop_btn
+                            text: "STOP"
+                            disabled: True
+                            md_bg_color: app.theme_cls.accent_color
+                            on_release: root.stop_timer()
+                
+                # Manual entry card
+                MDCard:
+                    orientation: 'vertical'
+                    padding: dp(15)
+                    spacing: dp(10)
+                    size_hint_y: None
+                    height: dp(250)
+                    elevation: 2
+                    
+                    MDLabel:
+                        text: "Manueller Eintrag"
+                        font_style: "H6"
+                        size_hint_y: None
+                        height: dp(30)
+                    
+                    MDTextField:
+                        id: date_input
+                        hint_text: "Datum (dd.mm.yyyy)"
+                        mode: "rectangle"
+                        helper_text: "Leer lassen für heute"
+                        helper_text_mode: "on_focus"
+                        size_hint_y: None
+                        height: dp(56)
+                    
+                    MDTextField:
+                        id: hours_input
+                        hint_text: "Stunden"
+                        mode: "rectangle"
+                        text: "1.0"
+                        input_filter: "float"
+                        size_hint_y: None
+                        height: dp(56)
+                    
+                    MDRaisedButton:
+                        text: "EINTRAG HINZUFÜGEN"
+                        size_hint_y: None
+                        height: dp(48)
+                        on_release: root.add_manual_entry()
+                
+                # Export card
+                MDCard:
+                    orientation: 'vertical'
+                    padding: dp(15)
+                    spacing: dp(10)
+                    size_hint_y: None
+                    height: dp(280)
+                    elevation: 2
+                    
+                    MDLabel:
+                        text: "Export"
+                        font_style: "H6"
+                        size_hint_y: None
+                        height: dp(30)
+                    
+                    MDRaisedButton:
+                        text: "PDF ERSTELLEN"
+                        size_hint_y: None
+                        height: dp(48)
+                        md_bg_color: app.theme_cls.primary_color
+                        on_release: root.export_pdf()
+                    
+                    MDRaisedButton:
+                        text: "PDF ERSTELLEN & TEILEN"
+                        size_hint_y: None
+                        height: dp(48)
+                        md_bg_color: app.theme_cls.primary_color
+                        on_release: root.export_pdf(auto_share=True)
+                    
+                    MDFlatButton:
+                        text: "CSV exportieren"
+                        size_hint_y: None
+                        height: dp(40)
+                        on_release: root.export_csv()
+                    
+                    MDFlatButton:
+                        text: "CSV exportieren & teilen"
+                        size_hint_y: None
+                        height: dp(40)
+                        on_release: root.export_csv(auto_share=True)
+                
+                # Entries list card
+                MDCard:
+                    orientation: 'vertical'
+                    padding: dp(15)
+                    spacing: dp(10)
+                    size_hint_y: None
+                    height: dp(400)
+                    elevation: 2
+                    
+                    MDLabel:
+                        text: "Letzte Einträge"
+                        font_style: "H6"
+                        size_hint_y: None
+                        height: dp(30)
+                    
+                    MDScrollView:
+                        MDList:
+                            id: entries_list
+                
+                # Footer
+                MDLabel:
+                    text: "made by Benedikt Bernhart"
+                    halign: "center"
+                    size_hint_y: None
+                    height: dp(30)
+                    theme_text_color: "Secondary"
