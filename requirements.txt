@@ -2,4 +2,3 @@ kivy
 pillow
 pyjnius
 plyer
-reportlab

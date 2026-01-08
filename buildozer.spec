@@ -10,8 +10,8 @@ source.main = main
 version = 2.0
 
 # Python requirements for iOS and Android
-# Removed: kivymd (not used), cython (managed by buildozer)
-requirements = python3,kivy,pillow,plyer,pyjnius,reportlab
+# Removed: kivymd, reportlab (not used), cython (managed by buildozer)
+requirements = python3,kivy,pillow,plyer,pyjnius
 
 # Android-specific requirements  
 android.permissions = WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,INTERNET
