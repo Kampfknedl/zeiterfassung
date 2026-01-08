@@ -5,7 +5,7 @@ package.domain = org.tkideneb2
 
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,db
-source.main = main.py
+source.main = main
 
 version = 2.0
 
