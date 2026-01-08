@@ -783,8 +783,116 @@ class RootWidget(BoxLayout):
             self.write_error_log(error_msg)
 
     def export_pdf(self, auto_share=False):
-        # Backward compatibility: keep old name but use CSV export
-        return self.export_csv(auto_share=auto_share)
+        """Export customer entries as PDF using fpdf2"""
+        selected_customer = self.ids.customer_spinner.text
+        if not selected_customer or selected_customer == '—':
+            self.show_error('Fehler', 'Bitte Kunde auswählen')
+            return
+
+        rows = db.get_entries(self.get_db_path(), selected_customer)
+        if not rows:
+            self.show_error('Info', 'Keine Einträge vorhanden')
+            return
+
+        try:
+            from fpdf import FPDF
+            from collections import defaultdict
+
+            out_dir = self.get_documents_dir()
+            os.makedirs(out_dir, exist_ok=True)
+            base_name = f"report_{selected_customer.replace(' ', '_')}.pdf"
+            temp_path = os.path.join(out_dir, base_name)
+
+            # Group entries by month
+            months_data = defaultdict(list)
+            for r in rows:
+                date_str = (r[3] or '')[:10]
+                month_key = date_str[:7] if date_str else "Undatiert"
+                months_data[month_key].append(r)
+
+            sorted_months = sorted(months_data.keys(), reverse=True)
+            grand_total = 0.0
+
+            # Create PDF
+            pdf = FPDF()
+            pdf.add_page()
+            pdf.set_auto_page_break(auto=True, margin=15)
+            
+            # Title
+            pdf.set_font('Helvetica', 'B', 16)
+            pdf.cell(0, 10, f'Zeiterfassung - {selected_customer}', ln=True, align='C')
+            pdf.ln(5)
+            
+            # Customer info
+            pdf.set_font('Helvetica', '', 10)
+            pdf.cell(0, 6, f'Erstellt am: {datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}', ln=True)
+            
+            cust = db.get_customer(self.get_db_path(), selected_customer)
+            if cust and cust[2]:
+                pdf.cell(0, 6, f'Adresse: {cust[2]}', ln=True)
+            if cust and cust[3]:
+                pdf.cell(0, 6, f'Email: {cust[3]}', ln=True)
+            if cust and cust[4]:
+                pdf.cell(0, 6, f'Telefon: {cust[4]}', ln=True)
+            
+            pdf.ln(5)
+
+            # Table header
+            pdf.set_font('Helvetica', 'B', 10)
+            pdf.cell(35, 8, 'Datum', border=1)
+            pdf.cell(110, 8, 'Tätigkeit', border=1)
+            pdf.cell(30, 8, 'Stunden', border=1, align='R')
+            pdf.ln()
+
+            # Monthly entries
+            pdf.set_font('Helvetica', '', 9)
+            for month_key in sorted_months:
+                rows_in_month = months_data[month_key]
+                month_total = 0.0
+
+                # Month header
+                pdf.set_font('Helvetica', 'B', 10)
+                pdf.cell(0, 8, f'Monat: {month_key}', ln=True)
+                pdf.set_font('Helvetica', '', 9)
+
+                for r in rows_in_month:
+                    date = (r[3] or '')[:10]
+                    act = r[2] or ''
+                    hrs = float(r[5] or 0)
+                    
+                    # Truncate activity if too long
+                    if len(act) > 60:
+                        act = act[:57] + '...'
+                    
+                    pdf.cell(35, 6, date, border=1)
+                    pdf.cell(110, 6, act, border=1)
+                    pdf.cell(30, 6, f'{hrs:.2f}', border=1, align='R')
+                    pdf.ln()
+                    month_total += hrs
+
+                # Month subtotal
+                pdf.set_font('Helvetica', 'B', 9)
+                pdf.cell(145, 6, f'Monatssumme {month_key}:', border=1, align='R')
+                pdf.cell(30, 6, f'{month_total:.2f}', border=1, align='R')
+                pdf.ln()
+                pdf.ln(3)
+                pdf.set_font('Helvetica', '', 9)
+                grand_total += month_total
+
+            # Grand total
+            pdf.ln(5)
+            pdf.set_font('Helvetica', 'B', 12)
+            pdf.cell(145, 10, 'Gesamtstunden:', border=1, align='R')
+            pdf.cell(30, 10, f'{grand_total:.2f}', border=1, align='R')
+
+            pdf.output(temp_path)
+            self.show_file_viewer(temp_path, selected_customer, mime_type='application/pdf', auto_share=auto_share)
+
+        except Exception as e:
+            import traceback
+            error_msg = f"Fehler beim PDF-Export:\n{str(e)}\n\n{traceback.format_exc()}"
+            self.show_error('PDF-Fehler', error_msg)
+            self.write_error_log(error_msg)
 
     def refresh_entries(self):
         # ensure UI has been built and ids available
