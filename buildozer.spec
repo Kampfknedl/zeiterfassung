@@ -5,12 +5,13 @@ package.domain = org.tkideneb2
 
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,db
-source.main = main_new.py
+source.main = main.py
 
 version = 2.0
 
 # Python requirements for iOS and Android
-requirements = python3,kivy,kivymd,pillow,plyer,pyjnius,reportlab,cython
+# Removed: kivymd (not used), cython (managed by buildozer)
+requirements = python3,kivy,pillow,plyer,pyjnius,reportlab
 
 # Android-specific requirements  
 android.permissions = WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,INTERNET
