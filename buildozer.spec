@@ -10,9 +10,8 @@ source.main = main
 version = 2.0
 
 # Python requirements for iOS and Android
-# Removed: kivymd, reportlab (not used), cython (managed by buildozer)
-# fpdf2 is pure Python, Android-compatible
-requirements = python3,kivy,pillow,plyer,pyjnius,fpdf2
+# reportlab is Android-compatible and stable
+requirements = python3,kivy,pillow,plyer,pyjnius,reportlab
 
 # Android-specific requirements  
 android.permissions = WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,INTERNET,MANAGE_EXTERNAL_STORAGE

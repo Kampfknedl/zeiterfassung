@@ -1095,7 +1095,11 @@ class RootWidget(BoxLayout):
             return
 
         try:
-            from fpdf import FPDF
+            from reportlab.lib.pagesizes import A4
+            from reportlab.lib import colors
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet
+            from reportlab.lib.units import mm
             from collections import defaultdict
 
             base_name = f"Zeiterfassung_{selected_customer.replace(' ', '_')}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
@@ -1110,126 +1114,123 @@ class RootWidget(BoxLayout):
             sorted_months = sorted(months_data.keys(), reverse=True)
             grand_total = 0.0
 
-            # Create PDF
-            pdf = FPDF()
-            pdf.add_page()
-            pdf.set_auto_page_break(auto=True, margin=15)
+            # Determine output path
+            if export_path and export_path.startswith('content://'):
+                import tempfile
+                temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+                pdf_path = temp_file.name
+                temp_file.close()
+            else:
+                if not os.path.exists(export_path):
+                    os.makedirs(export_path, exist_ok=True)
+                pdf_path = os.path.join(export_path, base_name)
+
+            # Create PDF with reportlab
+            doc = SimpleDocTemplate(pdf_path, pagesize=A4)
+            story = []
+            styles = getSampleStyleSheet()
             
             # Title
-            pdf.set_font('Helvetica', 'B', 18)
-            pdf.cell(0, 12, f'Zeiterfassung', ln=True, align='C')
-            pdf.set_font('Helvetica', 'B', 14)
-            pdf.cell(0, 10, f'{selected_customer}', ln=True, align='C')
-            pdf.ln(8)
+            story.append(Paragraph('<para align=center><b>Zeiterfassung</b></para>', styles['Title']))
+            story.append(Paragraph(f'<para align=center><b>{selected_customer}</b></para>', styles['Heading2']))
+            story.append(Spacer(1, 12))
             
             # Customer info
-            pdf.set_font('Helvetica', '', 10)
-            pdf.cell(0, 6, f'Erstellt am: {datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}', ln=True)
+            story.append(Paragraph(f'Erstellt am: {datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}', styles['Normal']))
             
             cust = db.get_customer(self.get_db_path(), selected_customer)
             if cust and cust[2]:
-                pdf.cell(0, 6, f'Adresse: {cust[2]}', ln=True)
+                story.append(Paragraph(f'Adresse: {cust[2]}', styles['Normal']))
             if cust and cust[3]:
-                pdf.cell(0, 6, f'Email: {cust[3]}', ln=True)
+                story.append(Paragraph(f'Email: {cust[3]}', styles['Normal']))
             if cust and cust[4]:
-                pdf.cell(0, 6, f'Telefon: {cust[4]}', ln=True)
+                story.append(Paragraph(f'Telefon: {cust[4]}', styles['Normal']))
             
-            pdf.ln(8)
-
-            # Table header
-            pdf.set_font('Helvetica', 'B', 10)
-            pdf.cell(35, 8, 'Datum', border=1)
-            pdf.cell(110, 8, 'Tätigkeit', border=1)
-            pdf.cell(30, 8, 'Stunden', border=1, align='R')
-            pdf.ln()
+            story.append(Spacer(1, 12))
 
             # Monthly entries
-            pdf.set_font('Helvetica', '', 9)
             for month_key in sorted_months:
                 rows_in_month = months_data[month_key]
                 month_total = 0.0
 
                 # Month header
-                pdf.set_font('Helvetica', 'B', 11)
-                pdf.cell(0, 10, f'Monat: {month_key}', ln=True)
-                pdf.set_font('Helvetica', '', 9)
+                story.append(Paragraph(f'<b>Monat: {month_key}</b>', styles['Heading3']))
+                story.append(Spacer(1, 6))
 
+                # Table data
+                table_data = [['Datum', 'Tätigkeit', 'Stunden']]
+                
                 for r in rows_in_month:
                     date = (r[3] or '')[:10]
                     act = r[2] or ''
                     hrs = float(r[5] or 0)
                     
-                    # Truncate activity if too long
-                    if len(act) > 60:
-                        act = act[:57] + '...'
+                    if len(act) > 50:
+                        act = act[:47] + '...'
                     
-                    pdf.cell(35, 7, date, border=1)
-                    pdf.cell(110, 7, act, border=1)
-                    pdf.cell(30, 7, f'{hrs:.2f}', border=1, align='R')
-                    pdf.ln()
+                    table_data.append([date, act, f'{hrs:.2f}'])
                     month_total += hrs
 
                 # Month subtotal
-                pdf.set_font('Helvetica', 'B', 10)
-                pdf.cell(145, 7, f'Monatssumme {month_key}:', border=1, align='R')
-                pdf.cell(30, 7, f'{month_total:.2f}', border=1, align='R')
-                pdf.ln()
-                pdf.ln(5)
-                pdf.set_font('Helvetica', '', 9)
+                table_data.append(['', f'Monatssumme:', f'{month_total:.2f}'])
+                
+                # Create table
+                t = Table(table_data)
+                t.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('ALIGN', (2, 0), (2, -1), 'RIGHT'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, 0), 10),
+                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                    ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ]))
+                story.append(t)
+                story.append(Spacer(1, 12))
                 grand_total += month_total
 
             # Grand total
-            pdf.ln(8)
-            pdf.set_font('Helvetica', 'B', 14)
-            pdf.cell(145, 12, 'Gesamtstunden:', border=1, align='R')
-            pdf.cell(30, 12, f'{grand_total:.2f}', border=1, align='R')
+            total_table = Table([[' Gesamtstunden:', f'{grand_total:.2f}']])
+            total_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), colors.lightblue),
+                ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 14),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ]))
+            story.append(total_table)
 
-            # Generate PDF bytes
-            try:
-                # fpdf2 returns bytes directly with dest='S'
-                pdf_output = pdf.output(dest='S')
-                # Ensure it's bytes
-                if not isinstance(pdf_output, bytes):
-                    pdf_output = pdf_output.encode('latin-1')
-            except Exception:
-                # Fallback for older fpdf versions
-                pdf_output = bytes(pdf.output(dest='S'), 'latin-1')
+            # Build PDF
+            doc.build(story)
             
-            final_path = None
-            
-            # Check if export_path is a content URI (OneDrive/Samsung picker)
+            # Handle content URI or file path
             if export_path and export_path.startswith('content://'):
-                # Write to content URI
                 try:
-                    doc_uri = self.write_pdf_to_uri(export_path, pdf_output, base_name)
+                    with open(pdf_path, 'rb') as f:
+                        pdf_bytes = f.read()
+                    doc_uri = self.write_pdf_to_uri(export_path, pdf_bytes, base_name)
                     if doc_uri:
-                        final_path = doc_uri
                         self.show_success_and_open_pdf(doc_uri, selected_customer, is_uri=True)
                     else:
-                        raise Exception("Konnte PDF nicht in ausgewählten Ordner schreiben")
+                        raise Exception("Konnte PDF nicht schreiben")
                 except Exception as uri_error:
-                    # Fallback: save to local documents folder
                     import traceback
                     print(f"Content URI write failed: {uri_error}\n{traceback.format_exc()}")
                     fallback_dir = self.get_documents_dir()
                     os.makedirs(fallback_dir, exist_ok=True)
-                    temp_path = os.path.join(fallback_dir, base_name)
-                    with open(temp_path, 'wb') as f:
-                        f.write(pdf_output)
-                    final_path = temp_path
-                    self.show_error('Info', f'Konnte nicht in ausgewählten Ordner schreiben.\nPDF wurde stattdessen hier gespeichert:\n{temp_path}')
-                    self.show_success_and_open_pdf(temp_path, selected_customer, is_uri=False)
+                    fallback_path = os.path.join(fallback_dir, base_name)
+                    import shutil
+                    shutil.move(pdf_path, fallback_path)
+                    self.show_success_and_open_pdf(fallback_path, selected_customer, is_uri=False)
+                finally:
+                    try:
+                        if os.path.exists(pdf_path):
+                            os.unlink(pdf_path)
+                    except Exception:
+                        pass
             else:
-                # Write to regular file path
-                if not os.path.exists(export_path):
-                    os.makedirs(export_path, exist_ok=True)
-                    
-                temp_path = os.path.join(export_path, base_name)
-                with open(temp_path, 'wb') as f:
-                    f.write(pdf_output)
-                    
-                final_path = temp_path
-                self.show_success_and_open_pdf(temp_path, selected_customer, is_uri=False)
+                self.show_success_and_open_pdf(pdf_path, selected_customer, is_uri=False)
 
         except Exception as e:
             import traceback
