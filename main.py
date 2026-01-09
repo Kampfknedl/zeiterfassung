@@ -257,33 +257,49 @@ class RootWidget(BoxLayout):
 
     def on_kv_post(self, base_widget):
         # Ensure DB initialized before attempting queries
-        db.init_db(self.get_db_path())
-        self.load_customers()
-        self.refresh_entries()
+        try:
+            db.init_db(self.get_db_path())
+        except Exception as e:
+            print(f"DB init error: {e}")
+        
+        try:
+            self.load_customers()
+        except Exception as e:
+            print(f"Load customers error: {e}")
+            self.customers = ['—']  # Fallback
+        
+        try:
+            self.refresh_entries()
+        except Exception as e:
+            print(f"Refresh entries error: {e}")
+        
         # Debug: print ids and children for visibility troubleshooting
         try:
             print("RootWidget ids:", list(self.ids.keys()))
             print("RootWidget children count:", len(self.children))
             print("Customers:", self.customers)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Debug print error: {e}")
+        
         # set default date for manual entries
         try:
             self.ids.date_input.text = datetime.date.today().strftime("%d.%m.%Y")
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Date input error: {e}")
+        
         # setup activity suggestions
         try:
             self._activity_dropdown = None
             self.ids.activity_input.bind(text=self.on_activity_text)
             self.ids.activity_input.bind(focus=self.on_activity_focus)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Activity input binding error: {e}")
+        
         # bind customer spinner change to refresh entries
         try:
             self.ids.customer_spinner.bind(text=self.on_customer_changed)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Customer spinner binding error: {e}")
 
     def show_error(self, title, message):
         # Show a scrollable error popup and also write a log file for easier sharing
@@ -953,15 +969,17 @@ class RootWidget(BoxLayout):
             # Start activity for result
             PythonActivity.mActivity.startActivityForResult(intent, 42)
             
-            # Bind to activity result
-            PythonActivity.mActivity.bind(on_activity_result=self._on_directory_result)
+            # Note: Activity result handling done via activity lifecycle, not binding here
             
         except Exception as e:
             import traceback
             error_msg = f"Fehler beim Öffnen des Dateiauswahldialogs:\n{str(e)}\n\n{traceback.format_exc()}"
-            self.show_error('Fehler', error_msg)
+            print(error_msg)
             # Fallback to default directory
-            callback(self.get_documents_dir())
+            try:
+                callback(self.get_documents_dir())
+            except Exception:
+                pass
 
     def _on_directory_result(self, request_code, result_code, intent):
         """Handle directory selection result"""
@@ -1005,12 +1023,17 @@ class RootWidget(BoxLayout):
         # Check if we already have a saved path
         saved_path = self.get_saved_pdf_path()
         
-        if saved_path:
-            # Use saved path
+        if saved_path and saved_path.startswith('content://'):
+            # Use saved content URI path
+            self.export_pdf_to_path(saved_path)
+        elif saved_path and os.path.exists(saved_path):
+            # Use saved file system path
             self.export_pdf_to_path(saved_path)
         else:
-            # Show directory picker
-            self.choose_pdf_directory(lambda path: self.export_pdf_to_path(path))
+            # Use default documents directory for now
+            # TODO: File picker can be enabled later once app is stable
+            default_path = self.get_documents_dir()
+            self.export_pdf_to_path(default_path)
 
     def write_pdf_to_uri(self, uri_string, pdf_bytes, filename):
         """Write PDF bytes to Android content URI (for OneDrive, etc.)"""
