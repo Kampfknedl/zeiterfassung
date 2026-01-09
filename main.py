@@ -165,7 +165,7 @@ KV = '''
                 size: self.size
                 radius: [10]
         Button:
-            text: '📄 PDF Report erstellen'
+            text: 'PDF Report erstellen'
             size_hint_y: None
             height: '50dp'
             on_release: root.export_pdf_with_dialog()
@@ -180,7 +180,7 @@ KV = '''
             spacing: 8
             Button:
                 id: start_btn
-                text: '▶ Start'
+                text: 'Start'
                 on_release: root.start_timer()
                 background_normal: ''
                 background_color: 0.2, 0.7, 0.3, 1
@@ -189,7 +189,7 @@ KV = '''
                 bold: True
             Button:
                 id: pause_btn
-                text: '⏸ Pause'
+                text: 'Pause'
                 disabled: True
                 on_release: root.pause_timer()
                 background_normal: ''
@@ -199,7 +199,7 @@ KV = '''
                 bold: True
             Button:
                 id: stop_btn
-                text: '⏹ Stop'
+                text: 'Stop'
                 on_release: root.stop_timer()
                 background_normal: ''
                 background_color: 0.9, 0.3, 0.3, 1
@@ -438,7 +438,7 @@ class RootWidget(BoxLayout):
 
         content = BoxLayout(orientation='vertical', spacing=8, padding=10)
         content.add_widget(Label(
-            text='✓ CSV erstellt!',
+            text='CSV erstellt!',
             size_hint_y=None,
             height='40dp',
             font_size='16sp'
@@ -455,9 +455,9 @@ class RootWidget(BoxLayout):
         ))
 
         btn_box = BoxLayout(size_hint_y=None, height='50dp', spacing=8)
-        share_btn = Button(text='📤 Teilen')
-        open_btn = Button(text='🔍 Öffnen')
-        close_btn = Button(text='✓ Schließen')
+        share_btn = Button(text='Teilen')
+        open_btn = Button(text='Oeffnen')
+        close_btn = Button(text='Schliessen')
         btn_box.add_widget(share_btn)
         btn_box.add_widget(open_btn)
         btn_box.add_widget(close_btn)
@@ -1227,7 +1227,7 @@ class RootWidget(BoxLayout):
             
             content = BoxLayout(orientation='vertical', spacing=10, padding=15)
             content.add_widget(Label(
-                text='✓ PDF erfolgreich erstellt!',
+                text='PDF erfolgreich erstellt!',
                 size_hint_y=None,
                 height='50dp',
                 font_size='18sp',
