@@ -1083,7 +1083,7 @@ class RootWidget(BoxLayout):
         return None
 
     def export_pdf_to_path(self, export_path):
-        """Export customer entries as PDF to specified path"""
+        """Export customer entries as PDF using Android Print Framework"""
         selected_customer = self.ids.customer_spinner.text
         if not selected_customer or selected_customer == '—':
             self.show_error('Fehler', 'Bitte Kunde auswählen')
@@ -1095,15 +1095,8 @@ class RootWidget(BoxLayout):
             return
 
         try:
-            from reportlab.lib.pagesizes import A4
-            from reportlab.lib import colors
-            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-            from reportlab.lib.styles import getSampleStyleSheet
-            from reportlab.lib.units import mm
             from collections import defaultdict
-
-            base_name = f"Zeiterfassung_{selected_customer.replace(' ', '_')}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-
+            
             # Group entries by month
             months_data = defaultdict(list)
             for r in rows:
@@ -1113,124 +1106,226 @@ class RootWidget(BoxLayout):
 
             sorted_months = sorted(months_data.keys(), reverse=True)
             grand_total = 0.0
-
-            # Determine output path
-            if export_path and export_path.startswith('content://'):
-                import tempfile
-                temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
-                pdf_path = temp_file.name
-                temp_file.close()
-            else:
-                if not os.path.exists(export_path):
-                    os.makedirs(export_path, exist_ok=True)
-                pdf_path = os.path.join(export_path, base_name)
-
-            # Create PDF with reportlab
-            doc = SimpleDocTemplate(pdf_path, pagesize=A4)
-            story = []
-            styles = getSampleStyleSheet()
             
-            # Title
-            story.append(Paragraph('<para align=center><b>Zeiterfassung</b></para>', styles['Title']))
-            story.append(Paragraph(f'<para align=center><b>{selected_customer}</b></para>', styles['Heading2']))
-            story.append(Spacer(1, 12))
-            
-            # Customer info
-            story.append(Paragraph(f'Erstellt am: {datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}', styles['Normal']))
-            
+            # Get customer info
             cust = db.get_customer(self.get_db_path(), selected_customer)
-            if cust and cust[2]:
-                story.append(Paragraph(f'Adresse: {cust[2]}', styles['Normal']))
-            if cust and cust[3]:
-                story.append(Paragraph(f'Email: {cust[3]}', styles['Normal']))
-            if cust and cust[4]:
-                story.append(Paragraph(f'Telefon: {cust[4]}', styles['Normal']))
             
-            story.append(Spacer(1, 12))
-
-            # Monthly entries
+            # Generate HTML for PDF
+            html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <style>
+                    body {{
+                        font-family: Arial, sans-serif;
+                        margin: 20px;
+                    }}
+                    h1 {{
+                        text-align: center;
+                        color: #333;
+                        margin-bottom: 5px;
+                    }}
+                    h2 {{
+                        text-align: center;
+                        color: #555;
+                        margin-top: 0;
+                    }}
+                    .info {{
+                        margin: 20px 0;
+                        font-size: 12px;
+                    }}
+                    table {{
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin: 15px 0;
+                    }}
+                    th {{
+                        background-color: #4CAF50;
+                        color: white;
+                        padding: 10px;
+                        text-align: left;
+                        border: 1px solid #ddd;
+                    }}
+                    td {{
+                        padding: 8px;
+                        border: 1px solid #ddd;
+                    }}
+                    tr:nth-child(even) {{
+                        background-color: #f2f2f2;
+                    }}
+                    .month-header {{
+                        background-color: #e0e0e0;
+                        font-weight: bold;
+                        padding: 10px;
+                        margin-top: 20px;
+                    }}
+                    .subtotal {{
+                        background-color: #fff3cd;
+                        font-weight: bold;
+                    }}
+                    .total {{
+                        background-color: #d4edda;
+                        font-weight: bold;
+                        font-size: 16px;
+                        text-align: right;
+                        padding: 15px;
+                        margin-top: 20px;
+                    }}
+                    .right {{
+                        text-align: right;
+                    }}
+                </style>
+            </head>
+            <body>
+                <h1>Zeiterfassung</h1>
+                <h2>{selected_customer}</h2>
+                
+                <div class="info">
+                    <p><strong>Erstellt am:</strong> {datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}</p>
+            """
+            
+            if cust and cust[2]:
+                html_content += f"<p><strong>Adresse:</strong> {cust[2]}</p>"
+            if cust and cust[3]:
+                html_content += f"<p><strong>Email:</strong> {cust[3]}</p>"
+            if cust and cust[4]:
+                html_content += f"<p><strong>Telefon:</strong> {cust[4]}</p>"
+            
+            html_content += "</div>"
+            
+            # Add monthly entries
             for month_key in sorted_months:
                 rows_in_month = months_data[month_key]
                 month_total = 0.0
-
-                # Month header
-                story.append(Paragraph(f'<b>Monat: {month_key}</b>', styles['Heading3']))
-                story.append(Spacer(1, 6))
-
-                # Table data
-                table_data = [['Datum', 'Tätigkeit', 'Stunden']]
+                
+                html_content += f'<div class="month-header">Monat: {month_key}</div>'
+                html_content += '<table><tr><th>Datum</th><th>Tätigkeit</th><th class="right">Stunden</th></tr>'
                 
                 for r in rows_in_month:
                     date = (r[3] or '')[:10]
                     act = r[2] or ''
                     hrs = float(r[5] or 0)
                     
-                    if len(act) > 50:
-                        act = act[:47] + '...'
+                    # Escape HTML
+                    act = act.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
                     
-                    table_data.append([date, act, f'{hrs:.2f}'])
+                    html_content += f'<tr><td>{date}</td><td>{act}</td><td class="right">{hrs:.2f}</td></tr>'
                     month_total += hrs
-
-                # Month subtotal
-                table_data.append(['', f'Monatssumme:', f'{month_total:.2f}'])
                 
-                # Create table
-                t = Table(table_data)
-                t.setStyle(TableStyle([
-                    ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                    ('ALIGN', (2, 0), (2, -1), 'RIGHT'),
-                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                    ('FONTSIZE', (0, 0), (-1, 0), 10),
-                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                    ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey),
-                    ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-                ]))
-                story.append(t)
-                story.append(Spacer(1, 12))
+                html_content += f'<tr class="subtotal"><td></td><td>Monatssumme {month_key}:</td><td class="right">{month_total:.2f}</td></tr>'
+                html_content += '</table>'
                 grand_total += month_total
-
-            # Grand total
-            total_table = Table([[' Gesamtstunden:', f'{grand_total:.2f}']])
-            total_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, -1), colors.lightblue),
-                ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
-                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, -1), 14),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ]))
-            story.append(total_table)
-
-            # Build PDF
-            doc.build(story)
             
-            # Handle content URI or file path
-            if export_path and export_path.startswith('content://'):
-                try:
-                    with open(pdf_path, 'rb') as f:
-                        pdf_bytes = f.read()
-                    doc_uri = self.write_pdf_to_uri(export_path, pdf_bytes, base_name)
-                    if doc_uri:
-                        self.show_success_and_open_pdf(doc_uri, selected_customer, is_uri=True)
-                    else:
-                        raise Exception("Konnte PDF nicht schreiben")
-                except Exception as uri_error:
-                    import traceback
-                    print(f"Content URI write failed: {uri_error}\n{traceback.format_exc()}")
-                    fallback_dir = self.get_documents_dir()
-                    os.makedirs(fallback_dir, exist_ok=True)
-                    fallback_path = os.path.join(fallback_dir, base_name)
-                    import shutil
-                    shutil.move(pdf_path, fallback_path)
-                    self.show_success_and_open_pdf(fallback_path, selected_customer, is_uri=False)
-                finally:
+            # Grand total
+            html_content += f'<div class="total">Gesamtstunden: {grand_total:.2f}</div>'
+            html_content += '</body></html>'
+            
+            # Use Android Print Framework
+            self.print_html_as_pdf(html_content, selected_customer)
+
+        except Exception as e:
+            import traceback
+            error_msg = f"Fehler beim PDF-Export:\n{str(e)}\n\n{traceback.format_exc()}"
+            self.show_error('PDF-Fehler', error_msg)
+            self.write_error_log(error_msg)
+
+    def print_html_as_pdf(self, html_content, customer_name):
+        """Use Android Print Framework to create PDF from HTML"""
+        try:
+            from jnius import autoclass, cast, PythonJavaClass, java_method
+            
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            WebView = autoclass('android.webkit.WebView')
+            WebViewClient = autoclass('android.webkit.WebViewClient')
+            PrintManager = autoclass('android.print.PrintManager')
+            Context = autoclass('android.content.Context')
+            Runnable = autoclass('java.lang.Runnable')
+            
+            activity = PythonActivity.mActivity
+            
+            # Create custom WebViewClient as Python class
+            class MyWebViewClient(PythonJavaClass):
+                __javainterfaces__ = ['android/webkit/WebViewClient']
+                
+                def __init__(self, webview_ref, customer):
+                    super().__init__()
+                    self.webview = webview_ref
+                    self.customer = customer
+                
+                @java_method('(Landroid/webkit/WebView;Ljava/lang/String;)V')
+                def onPageFinished(self, view, url):
                     try:
-                        if os.path.exists(pdf_path):
-                            os.unlink(pdf_path)
-                    except Exception:
-                        pass
-            else:
-                self.show_success_and_open_pdf(pdf_path, selected_customer, is_uri=False)
+                        # Create print job
+                        print_mgr = activity.getSystemService(Context.PRINT_SERVICE)
+                        print_adapter = self.webview.createPrintDocumentAdapter(f"Zeiterfassung_{self.customer}")
+                        
+                        # Start print job (user can save as PDF)
+                        print_mgr.print(f"Zeiterfassung_{self.customer}", print_adapter, None)
+                    except Exception as e:
+                        print(f"Print error: {e}")
+            
+            # Run on UI thread
+            class PrintRunnable(PythonJavaClass):
+                __javainterfaces__ = ['java/lang/Runnable']
+                
+                def __init__(self, html, customer):
+                    super().__init__()
+                    self.html_content = html
+                    self.customer_name = customer
+                
+                @java_method('()V')
+                def run(self):
+                    try:
+                        # Create WebView for rendering HTML
+                        webview = WebView(activity)
+                        webview.loadDataWithBaseURL(None, self.html_content, "text/html", "UTF-8", None)
+                        webview.setWebViewClient(MyWebViewClient(webview, self.customer_name))
+                    except Exception as e:
+                        print(f"WebView error: {e}")
+            
+            activity.runOnUiThread(PrintRunnable(html_content, customer_name))
+            
+            # Show success message
+            from kivy.uix.popup import Popup
+            from kivy.uix.label import Label
+            from kivy.uix.button import Button
+            
+            content = BoxLayout(orientation='vertical', spacing=10, padding=15)
+            content.add_widget(Label(
+                text='PDF Druck-Dialog wird geoeffnet',
+                size_hint_y=None,
+                height='50dp',
+                font_size='18sp',
+                bold=True
+            ))
+            content.add_widget(Label(
+                text='Waehle "Als PDF speichern" um die Datei zu exportieren.',
+                size_hint_y=None,
+                height='60dp',
+                font_size='14sp'
+            ))
+            
+            btn = Button(
+                text='OK',
+                size_hint_y=None,
+                height='50dp'
+            )
+            content.add_widget(btn)
+            
+            popup = Popup(
+                title='PDF Export',
+                content=content,
+                size_hint=(.85, .5)
+            )
+            btn.bind(on_release=popup.dismiss)
+            popup.open()
+            
+        except Exception as e:
+            import traceback
+            error_msg = f"Fehler beim Drucken:\n{str(e)}\n\n{traceback.format_exc()}"
+            print(error_msg)
+            self.show_error('Druck-Fehler', error_msg)
 
         except Exception as e:
             import traceback
