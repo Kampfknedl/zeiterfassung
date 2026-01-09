@@ -15,7 +15,7 @@ version = 2.0
 requirements = python3,kivy,pillow,plyer,pyjnius,fpdf2
 
 # Android-specific requirements  
-android.permissions = WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,INTERNET
+android.permissions = WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,INTERNET,MANAGE_EXTERNAL_STORAGE
 android.api = 34
 android.minapi = 21
 android.archs = arm64-v8a,armeabi-v7a
@@ -23,9 +23,9 @@ android.accept_sdk_license = True
 android.ndk = 25b
 android.skip_update = False
 
-# Android FileProvider configuration for sharing PDFs/CSVs
+# Android FileProvider and content provider configuration for sharing and file access
 android.add_resources = res
-android.gradle_dependencies = androidx.core:core:1.9.0
+android.gradle_dependencies = androidx.core:core:1.9.0,androidx.documentfile:documentfile:1.0.1
 
 # iOS-specific settings
 ios.kivy_ios_url = https://github.com/kivy/kivy-ios

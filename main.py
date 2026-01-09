@@ -7,136 +7,241 @@ import datetime
 import db
 
 KV = '''
-RootWidget:
+<RootWidget>:
     orientation: 'vertical'
-    spacing: 4
+    spacing: 8
+    padding: 12
+    canvas.before:
+        Color:
+            rgba: 0.97, 0.97, 0.97, 1
+        Rectangle:
+            pos: self.pos
+            size: self.size
 
     # Row 1: customer selection - responsive
     BoxLayout:
         orientation: 'vertical'
         size_hint_y: None
-        height: '140dp'
-        spacing: 4
+        height: '150dp'
+        spacing: 6
+        canvas.before:
+            Color:
+                rgba: 1, 1, 1, 1
+            RoundedRectangle:
+                pos: self.pos
+                size: self.size
+                radius: [10]
+        padding: 10
         Label:
-            text: 'Kunde:'
+            text: 'Kunde'
             size_hint_y: None
-            height: '30dp'
+            height: '28dp'
+            font_size: '14sp'
+            bold: True
+            color: 0.2, 0.2, 0.2, 1
+            halign: 'left'
+            text_size: self.size
         Spinner:
             id: customer_spinner
             text: root.customers[0] if root.customers else '—'
             values: root.customers
             size_hint_y: None
-            height: '40dp'
+            height: '44dp'
+            background_normal: ''
+            background_color: 0.95, 0.95, 0.95, 1
+            font_size: '15sp'
         BoxLayout:
             size_hint_y: None
-            height: '40dp'
-            spacing: 4
+            height: '44dp'
+            spacing: 8
             Button:
                 text: '+ Kunde'
                 on_release: root.add_customer()
+                background_normal: ''
+                background_color: 0.3, 0.6, 0.9, 1
+                color: 1, 1, 1, 1
+                font_size: '14sp'
             Button:
                 text: 'Kunden verwalten'
                 on_release: root.open_customer_management()
+                background_normal: ''
+                background_color: 0.5, 0.5, 0.5, 1
+                color: 1, 1, 1, 1
+                font_size: '14sp'
 
     # Row 2: activity, date, hours - responsive
     BoxLayout:
         orientation: 'vertical'
         size_hint_y: None
-        height: '200dp'
-        spacing: 4
+        height: '220dp'
+        spacing: 6
+        padding: 10
+        canvas.before:
+            Color:
+                rgba: 1, 1, 1, 1
+            RoundedRectangle:
+                pos: self.pos
+                size: self.size
+                radius: [10]
         Label:
-            text: 'Tätigkeit:'
+            text: 'Tätigkeit'
             size_hint_y: None
-            height: '30dp'
+            height: '28dp'
+            font_size: '14sp'
+            bold: True
+            color: 0.2, 0.2, 0.2, 1
+            halign: 'left'
+            text_size: self.size
         TextInput:
             id: activity_input
             multiline: False
             size_hint_y: None
-            height: '40dp'
+            height: '44dp'
+            font_size: '15sp'
+            padding: [12, 10]
+            background_normal: ''
+            background_color: 0.95, 0.95, 0.95, 1
         BoxLayout:
             size_hint_y: None
-            height: '40dp'
-            spacing: 4
+            height: '44dp'
+            spacing: 8
             Label:
-                text: 'Datum:'
+                text: 'Datum'
                 size_hint_x: None
-                width: '60dp'
+                width: '70dp'
+                font_size: '14sp'
+                bold: True
+                color: 0.2, 0.2, 0.2, 1
             TextInput:
                 id: date_input
                 text: ''
                 hint_text: 'dd.mm.yyyy'
                 multiline: False
+                font_size: '15sp'
+                padding: [12, 10]
+                background_normal: ''
+                background_color: 0.95, 0.95, 0.95, 1
         BoxLayout:
             size_hint_y: None
-            height: '40dp'
-            spacing: 4
+            height: '44dp'
+            spacing: 8
             Label:
-                text: 'Std:'
+                text: 'Std'
                 size_hint_x: None
-                width: '40dp'
+                width: '50dp'
+                font_size: '14sp'
+                bold: True
+                color: 0.2, 0.2, 0.2, 1
             TextInput:
                 id: hours_input
                 text: '1.0'
                 input_filter: 'float'
                 multiline: False
+                font_size: '15sp'
+                padding: [12, 10]
+                background_normal: ''
+                background_color: 0.95, 0.95, 0.95, 1
             Button:
-                text: 'Eintrag'
+                text: '+ Eintrag'
                 on_release: root.add_entry(activity_input.text, hours_input.text)
+                background_normal: ''
+                background_color: 0.2, 0.7, 0.3, 1
+                color: 1, 1, 1, 1
+                font_size: '15sp'
+                bold: True
 
-    # Row 3: actions
+    # Row 3: PDF Export & Timer
     BoxLayout:
         orientation: 'vertical'
         size_hint_y: None
-        height: '120dp'
-        spacing: 4
+        height: '130dp'
+        spacing: 6
+        padding: 10
+        canvas.before:
+            Color:
+                rgba: 1, 1, 1, 1
+            RoundedRectangle:
+                pos: self.pos
+                size: self.size
+                radius: [10]
         Button:
-            text: 'Report (CSV)'
+            text: '📄 PDF Report erstellen'
             size_hint_y: None
-            height: '40dp'
-            on_release: root.export_csv()
-        Button:
-            text: 'Report + Teilen (CSV)'
-            size_hint_y: None
-            height: '40dp'
-            on_release: root.export_csv(auto_share=True)
+            height: '50dp'
+            on_release: root.export_pdf_with_dialog()
+            background_normal: ''
+            background_color: 0.9, 0.3, 0.3, 1
+            color: 1, 1, 1, 1
+            font_size: '16sp'
+            bold: True
         BoxLayout:
             size_hint_y: None
-            height: '40dp'
-            spacing: 4
+            height: '48dp'
+            spacing: 8
             Button:
                 id: start_btn
-                text: 'Start'
+                text: '▶ Start'
                 on_release: root.start_timer()
+                background_normal: ''
+                background_color: 0.2, 0.7, 0.3, 1
+                color: 1, 1, 1, 1
+                font_size: '14sp'
+                bold: True
             Button:
                 id: pause_btn
-                text: 'Pause'
+                text: '⏸ Pause'
                 disabled: True
                 on_release: root.pause_timer()
+                background_normal: ''
+                background_color: 0.9, 0.6, 0.2, 1
+                color: 1, 1, 1, 1
+                font_size: '14sp'
+                bold: True
             Button:
                 id: stop_btn
-                text: 'Stop'
+                text: '⏹ Stop'
                 on_release: root.stop_timer()
+                background_normal: ''
+                background_color: 0.9, 0.3, 0.3, 1
+                color: 1, 1, 1, 1
+                font_size: '14sp'
+                bold: True
 
-    Label:
-        text: 'Letzte Einträge:'
-        size_hint_y: None
-        height: '30dp'
-
-    ScrollView:
-        do_scroll_x: False
-        BoxLayout:
-            id: entries_box
-            orientation: 'vertical'
+    BoxLayout:
+        orientation: 'vertical'
+        spacing: 6
+        padding: [10, 6, 10, 6]
+        canvas.before:
+            Color:
+                rgba: 1, 1, 1, 1
+            RoundedRectangle:
+                pos: self.pos
+                size: self.size
+                radius: [10]
+        Label:
+            text: 'Letzte Einträge'
             size_hint_y: None
-            height: self.minimum_height
-            spacing: 4
+            height: '32dp'
+            font_size: '14sp'
+            bold: True
+            color: 0.2, 0.2, 0.2, 1
+            halign: 'left'
+            text_size: self.size
+        ScrollView:
+            do_scroll_x: False
+            BoxLayout:
+                id: entries_box
+                orientation: 'vertical'
+                size_hint_y: None
+                height: self.minimum_height
+                spacing: 6
 
     Label:
         text: 'made by Benedikt Bernhart'
         size_hint_y: None
-        height: '20dp'
-        font_size: '10sp'
-        color: 0.5, 0.5, 0.5, 1
+        height: '24dp'
+        font_size: '11sp'
+        color: 0.6, 0.6, 0.6, 1
 '''
 
 
@@ -148,6 +253,7 @@ class RootWidget(BoxLayout):
         self._timer_start = None
         self._timer_paused_time = 0  # accumulated paused seconds
         self._pause_start = None      # when pause was pressed
+        self._pdf_export_path = None  # User-selected PDF export directory
 
     def on_kv_post(self, base_widget):
         # Ensure DB initialized before attempting queries
@@ -426,7 +532,7 @@ class RootWidget(BoxLayout):
             except Exception:
                 return self.get_db_dir()
 
-    def share_file_fileprovider(self, filepath, mime_type='text/csv'):
+    def share_file_fileprovider(self, filepath, mime_type='text/csv', is_uri=False):
         """Share a file using Android FileProvider (Android 7+) with fallback."""
         try:
             from jnius import autoclass, cast
@@ -437,26 +543,36 @@ class RootWidget(BoxLayout):
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
 
             context = PythonActivity.mActivity
-            java_file = File(filepath)
             
-            # Try FileProvider first (Android 7+, more secure)
-            try:
-                FileProvider = autoclass('androidx.core.content.FileProvider')
-                authority = "org.tkideneb.zeiterfassung.fileprovider"
-                uri = FileProvider.getUriForFile(context, authority, java_file)
-            except Exception:
-                # Fallback to file:// URI for Android 6 and below
-                uri = Uri.fromFile(java_file)
+            if is_uri or (filepath and filepath.startswith('content://')):
+                # Already a content URI
+                uri = Uri.parse(filepath)
+            else:
+                # Regular file path - convert to URI
+                java_file = File(filepath)
+                
+                # Try FileProvider first (Android 7+, more secure)
+                try:
+                    FileProvider = autoclass('androidx.core.content.FileProvider')
+                    authority = "org.tkideneb.zeiterfassung.fileprovider"
+                    uri = FileProvider.getUriForFile(context, authority, java_file)
+                except Exception as fp_error:
+                    print(f"FileProvider for share failed: {fp_error}")
+                    # Fallback to file:// URI for Android 6 and below
+                    uri = Uri.fromFile(java_file)
 
             # Create SEND intent
             intent = Intent(Intent.ACTION_SEND)
             intent.setType(mime_type)
             intent.putExtra(Intent.EXTRA_STREAM, uri)
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
             # Create chooser
-            title = cast('java.lang.CharSequence', String('Report teilen via'))
+            file_type = 'PDF' if mime_type == 'application/pdf' else 'Report'
+            title = cast('java.lang.CharSequence', String(f'{file_type} teilen via'))
             chooser = Intent.createChooser(intent, title)
+            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(chooser)
             
             return True
@@ -782,8 +898,169 @@ class RootWidget(BoxLayout):
             self.show_error('CSV-Fehler', error_msg)
             self.write_error_log(error_msg)
 
-    def export_pdf(self, auto_share=False):
-        """Export customer entries as PDF using fpdf2"""
+    def get_saved_pdf_path(self):
+        """Retrieve saved PDF export path from settings file"""
+        try:
+            settings_file = os.path.join(self.get_db_dir(), 'pdf_settings.txt')
+            if os.path.exists(settings_file):
+                with open(settings_file, 'r', encoding='utf-8') as f:
+                    path = f.read().strip()
+                    if path and os.path.exists(path):
+                        return path
+        except Exception:
+            pass
+        return None
+
+    def save_pdf_path(self, path):
+        """Save PDF export path to settings file"""
+        try:
+            settings_file = os.path.join(self.get_db_dir(), 'pdf_settings.txt')
+            with open(settings_file, 'w', encoding='utf-8') as f:
+                f.write(path)
+            self._pdf_export_path = path
+        except Exception as e:
+            print(f"Error saving PDF path: {e}")
+
+    def choose_pdf_directory(self, callback):
+        """Open Samsung file picker to choose PDF export directory, prioritizing OneDrive"""
+        try:
+            from jnius import autoclass, cast
+            Intent = autoclass('android.content.Intent')
+            Uri = autoclass('android.net.Uri')
+            DocumentsContract = autoclass('android.provider.DocumentsContract')
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            
+            # Create OPEN_DOCUMENT_TREE intent for directory selection
+            intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+            
+            # Try to set OneDrive as initial location (Samsung Devices)
+            try:
+                # OneDrive URI for Samsung devices
+                onedrive_uri = Uri.parse("content://com.microsoft.skydrive.content.StorageAccessProvider/")
+                intent.putExtra("android.provider.extra.INITIAL_URI", onedrive_uri)
+            except Exception:
+                pass  # If OneDrive not available, use default picker
+            
+            # Set flags for persistent access
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | 
+                          Intent.FLAG_GRANT_WRITE_URI_PERMISSION |
+                          Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION |
+                          Intent.FLAG_GRANT_PREFIX_URI_PERMISSION)
+            
+            # Store callback for result handling
+            self._directory_callback = callback
+            
+            # Start activity for result
+            PythonActivity.mActivity.startActivityForResult(intent, 42)
+            
+            # Bind to activity result
+            PythonActivity.mActivity.bind(on_activity_result=self._on_directory_result)
+            
+        except Exception as e:
+            import traceback
+            error_msg = f"Fehler beim Öffnen des Dateiauswahldialogs:\n{str(e)}\n\n{traceback.format_exc()}"
+            self.show_error('Fehler', error_msg)
+            # Fallback to default directory
+            callback(self.get_documents_dir())
+
+    def _on_directory_result(self, request_code, result_code, intent):
+        """Handle directory selection result"""
+        try:
+            if request_code == 42 and result_code == -1:  # RESULT_OK = -1
+                from jnius import autoclass
+                Intent = autoclass('android.content.Intent')
+                Uri = autoclass('android.net.Uri')
+                DocumentsContract = autoclass('android.provider.DocumentsContract')
+                PythonActivity = autoclass('org.kivy.android.PythonActivity')
+                
+                if intent is not None:
+                    tree_uri = intent.getData()
+                    
+                    # Take persistable URI permission
+                    content_resolver = PythonActivity.mActivity.getContentResolver()
+                    content_resolver.takePersistableUriPermission(
+                        tree_uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    )
+                    
+                    # Convert URI to usable path
+                    uri_string = tree_uri.toString()
+                    
+                    # Save this path for future use
+                    self.save_pdf_path(uri_string)
+                    
+                    # Call the callback
+                    if hasattr(self, '_directory_callback'):
+                        self._directory_callback(uri_string)
+                        
+        except Exception as e:
+            import traceback
+            print(f"Directory result error: {str(e)}\n{traceback.format_exc()}")
+            # Fallback to default
+            if hasattr(self, '_directory_callback'):
+                self._directory_callback(self.get_documents_dir())
+
+    def export_pdf_with_dialog(self):
+        """Export PDF with directory selection dialog (shown once, then remembered)"""
+        # Check if we already have a saved path
+        saved_path = self.get_saved_pdf_path()
+        
+        if saved_path:
+            # Use saved path
+            self.export_pdf_to_path(saved_path)
+        else:
+            # Show directory picker
+            self.choose_pdf_directory(lambda path: self.export_pdf_to_path(path))
+
+    def write_pdf_to_uri(self, uri_string, pdf_bytes, filename):
+        """Write PDF bytes to Android content URI (for OneDrive, etc.)"""
+        try:
+            from jnius import autoclass
+            Uri = autoclass('android.net.Uri')
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            DocumentFile = autoclass('androidx.documentfile.provider.DocumentFile')
+            
+            tree_uri = Uri.parse(uri_string)
+            context = PythonActivity.mActivity
+            content_resolver = context.getContentResolver()
+            
+            # Get DocumentFile from tree URI
+            doc_tree = DocumentFile.fromTreeUri(context, tree_uri)
+            
+            if doc_tree and doc_tree.canWrite():
+                # Create new PDF file in the directory
+                new_file = doc_tree.createFile('application/pdf', filename)
+                
+                if new_file:
+                    # Write PDF bytes to the file
+                    output_stream = content_resolver.openOutputStream(new_file.getUri())
+                    
+                    # Convert Python bytes to Java byte array
+                    if isinstance(pdf_bytes, bytes):
+                        output_stream.write(pdf_bytes)
+                    else:
+                        # If it's a string, encode it
+                        output_stream.write(pdf_bytes.encode('latin-1'))
+                    
+                    output_stream.flush()
+                    output_stream.close()
+                    
+                    # Return the document URI as string
+                    return new_file.getUri().toString()
+                else:
+                    raise Exception("Konnte Datei nicht erstellen")
+            else:
+                raise Exception("Kein Schreibzugriff auf ausgewählten Ordner")
+            
+        except Exception as e:
+            import traceback
+            print(f"Write to URI error: {str(e)}\n{traceback.format_exc()}")
+            raise
+        
+        return None
+
+    def export_pdf_to_path(self, export_path):
+        """Export customer entries as PDF to specified path"""
         selected_customer = self.ids.customer_spinner.text
         if not selected_customer or selected_customer == '—':
             self.show_error('Fehler', 'Bitte Kunde auswählen')
@@ -798,10 +1075,7 @@ class RootWidget(BoxLayout):
             from fpdf import FPDF
             from collections import defaultdict
 
-            out_dir = self.get_documents_dir()
-            os.makedirs(out_dir, exist_ok=True)
-            base_name = f"report_{selected_customer.replace(' ', '_')}.pdf"
-            temp_path = os.path.join(out_dir, base_name)
+            base_name = f"Zeiterfassung_{selected_customer.replace(' ', '_')}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
 
             # Group entries by month
             months_data = defaultdict(list)
@@ -819,9 +1093,11 @@ class RootWidget(BoxLayout):
             pdf.set_auto_page_break(auto=True, margin=15)
             
             # Title
-            pdf.set_font('Helvetica', 'B', 16)
-            pdf.cell(0, 10, f'Zeiterfassung - {selected_customer}', ln=True, align='C')
-            pdf.ln(5)
+            pdf.set_font('Helvetica', 'B', 18)
+            pdf.cell(0, 12, f'Zeiterfassung', ln=True, align='C')
+            pdf.set_font('Helvetica', 'B', 14)
+            pdf.cell(0, 10, f'{selected_customer}', ln=True, align='C')
+            pdf.ln(8)
             
             # Customer info
             pdf.set_font('Helvetica', '', 10)
@@ -835,7 +1111,7 @@ class RootWidget(BoxLayout):
             if cust and cust[4]:
                 pdf.cell(0, 6, f'Telefon: {cust[4]}', ln=True)
             
-            pdf.ln(5)
+            pdf.ln(8)
 
             # Table header
             pdf.set_font('Helvetica', 'B', 10)
@@ -851,8 +1127,8 @@ class RootWidget(BoxLayout):
                 month_total = 0.0
 
                 # Month header
-                pdf.set_font('Helvetica', 'B', 10)
-                pdf.cell(0, 8, f'Monat: {month_key}', ln=True)
+                pdf.set_font('Helvetica', 'B', 11)
+                pdf.cell(0, 10, f'Monat: {month_key}', ln=True)
                 pdf.set_font('Helvetica', '', 9)
 
                 for r in rows_in_month:
@@ -864,35 +1140,191 @@ class RootWidget(BoxLayout):
                     if len(act) > 60:
                         act = act[:57] + '...'
                     
-                    pdf.cell(35, 6, date, border=1)
-                    pdf.cell(110, 6, act, border=1)
-                    pdf.cell(30, 6, f'{hrs:.2f}', border=1, align='R')
+                    pdf.cell(35, 7, date, border=1)
+                    pdf.cell(110, 7, act, border=1)
+                    pdf.cell(30, 7, f'{hrs:.2f}', border=1, align='R')
                     pdf.ln()
                     month_total += hrs
 
                 # Month subtotal
-                pdf.set_font('Helvetica', 'B', 9)
-                pdf.cell(145, 6, f'Monatssumme {month_key}:', border=1, align='R')
-                pdf.cell(30, 6, f'{month_total:.2f}', border=1, align='R')
+                pdf.set_font('Helvetica', 'B', 10)
+                pdf.cell(145, 7, f'Monatssumme {month_key}:', border=1, align='R')
+                pdf.cell(30, 7, f'{month_total:.2f}', border=1, align='R')
                 pdf.ln()
-                pdf.ln(3)
+                pdf.ln(5)
                 pdf.set_font('Helvetica', '', 9)
                 grand_total += month_total
 
             # Grand total
-            pdf.ln(5)
-            pdf.set_font('Helvetica', 'B', 12)
-            pdf.cell(145, 10, 'Gesamtstunden:', border=1, align='R')
-            pdf.cell(30, 10, f'{grand_total:.2f}', border=1, align='R')
+            pdf.ln(8)
+            pdf.set_font('Helvetica', 'B', 14)
+            pdf.cell(145, 12, 'Gesamtstunden:', border=1, align='R')
+            pdf.cell(30, 12, f'{grand_total:.2f}', border=1, align='R')
 
-            pdf.output(temp_path)
-            self.show_file_viewer(temp_path, selected_customer, mime_type='application/pdf', auto_share=auto_share)
+            # Generate PDF bytes
+            try:
+                # fpdf2 returns bytes directly with dest='S'
+                pdf_output = pdf.output(dest='S')
+                # Ensure it's bytes
+                if not isinstance(pdf_output, bytes):
+                    pdf_output = pdf_output.encode('latin-1')
+            except Exception:
+                # Fallback for older fpdf versions
+                pdf_output = bytes(pdf.output(dest='S'), 'latin-1')
+            
+            final_path = None
+            
+            # Check if export_path is a content URI (OneDrive/Samsung picker)
+            if export_path and export_path.startswith('content://'):
+                # Write to content URI
+                try:
+                    doc_uri = self.write_pdf_to_uri(export_path, pdf_output, base_name)
+                    if doc_uri:
+                        final_path = doc_uri
+                        self.show_success_and_open_pdf(doc_uri, selected_customer, is_uri=True)
+                    else:
+                        raise Exception("Konnte PDF nicht in ausgewählten Ordner schreiben")
+                except Exception as uri_error:
+                    # Fallback: save to local documents folder
+                    import traceback
+                    print(f"Content URI write failed: {uri_error}\n{traceback.format_exc()}")
+                    fallback_dir = self.get_documents_dir()
+                    os.makedirs(fallback_dir, exist_ok=True)
+                    temp_path = os.path.join(fallback_dir, base_name)
+                    with open(temp_path, 'wb') as f:
+                        f.write(pdf_output)
+                    final_path = temp_path
+                    self.show_error('Info', f'Konnte nicht in ausgewählten Ordner schreiben.\nPDF wurde stattdessen hier gespeichert:\n{temp_path}')
+                    self.show_success_and_open_pdf(temp_path, selected_customer, is_uri=False)
+            else:
+                # Write to regular file path
+                if not os.path.exists(export_path):
+                    os.makedirs(export_path, exist_ok=True)
+                    
+                temp_path = os.path.join(export_path, base_name)
+                with open(temp_path, 'wb') as f:
+                    f.write(pdf_output)
+                    
+                final_path = temp_path
+                self.show_success_and_open_pdf(temp_path, selected_customer, is_uri=False)
 
         except Exception as e:
             import traceback
             error_msg = f"Fehler beim PDF-Export:\n{str(e)}\n\n{traceback.format_exc()}"
             self.show_error('PDF-Fehler', error_msg)
             self.write_error_log(error_msg)
+
+    def show_success_and_open_pdf(self, filepath, customer_name, is_uri=False):
+        """Show success message and automatically open PDF"""
+        try:
+            # Automatically open the PDF
+            self.open_pdf_file(filepath, is_uri=is_uri)
+            
+            # Show success toast/notification
+            from kivy.uix.popup import Popup
+            from kivy.uix.label import Label
+            from kivy.uix.button import Button
+            
+            content = BoxLayout(orientation='vertical', spacing=10, padding=15)
+            content.add_widget(Label(
+                text='✓ PDF erfolgreich erstellt!',
+                size_hint_y=None,
+                height='50dp',
+                font_size='18sp',
+                bold=True,
+                color=(0.2, 0.7, 0.3, 1)
+            ))
+            content.add_widget(Label(
+                text=f'Kunde: {customer_name}',
+                size_hint_y=None,
+                height='30dp',
+                font_size='14sp'
+            ))
+            content.add_widget(Label(
+                text='PDF wird jetzt geöffnet...',
+                size_hint_y=None,
+                height='30dp',
+                font_size='14sp',
+                color=(0.5, 0.5, 0.5, 1)
+            ))
+            
+            btn = Button(
+                text='OK',
+                size_hint_y=None,
+                height='50dp',
+                background_normal='',
+                background_color=(0.3, 0.6, 0.9, 1),
+                color=(1, 1, 1, 1),
+                font_size='16sp',
+                bold=True
+            )
+            content.add_widget(btn)
+            
+            popup = Popup(
+                title='PDF Export',
+                content=content,
+                size_hint=(.85, .5),
+                auto_dismiss=True
+            )
+            btn.bind(on_release=popup.dismiss)
+            popup.open()
+            
+        except Exception as e:
+            import traceback
+            print(f"Show success error: {str(e)}\n{traceback.format_exc()}")
+
+    def open_pdf_file(self, filepath, is_uri=False):
+        """Open PDF file with default viewer using Samsung/Android intent"""
+        try:
+            from jnius import autoclass, cast
+            Intent = autoclass('android.content.Intent')
+            Uri = autoclass('android.net.Uri')
+            File = autoclass('java.io.File')
+            String = autoclass('java.lang.String')
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+
+            if is_uri:
+                # Already a content URI
+                uri = Uri.parse(filepath)
+            else:
+                # Convert file path to URI
+                java_file = File(filepath)
+                
+                # Try FileProvider first (Android 7+)
+                try:
+                    FileProvider = autoclass('androidx.core.content.FileProvider')
+                    authority = "org.tkideneb.zeiterfassung.fileprovider"
+                    uri = FileProvider.getUriForFile(PythonActivity.mActivity, authority, java_file)
+                except Exception as fp_error:
+                    print(f"FileProvider failed: {fp_error}")
+                    # Fallback to file:// URI for older devices
+                    uri = Uri.fromFile(java_file)
+
+            intent = Intent(Intent.ACTION_VIEW)
+            intent.setDataAndType(uri, 'application/pdf')
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+
+            # Create chooser for better UX
+            try:
+                title = cast('java.lang.CharSequence', String('PDF öffnen mit'))
+                chooser = Intent.createChooser(intent, title)
+                PythonActivity.mActivity.startActivity(chooser)
+            except Exception:
+                # Fallback: direct intent
+                PythonActivity.mActivity.startActivity(intent)
+            
+        except Exception as e:
+            import traceback
+            error_msg = f"Fehler beim Öffnen der PDF:\n{str(e)}\n\n{traceback.format_exc()}"
+            print(error_msg)
+            # Don't show error popup here - just log it
+            self.write_error_log(error_msg)
+
+    def export_pdf(self, auto_share=False):
+        """Legacy PDF export function - redirects to new dialog-based export"""
+        self.export_pdf_with_dialog()
 
     def refresh_entries(self):
         # ensure UI has been built and ids available
