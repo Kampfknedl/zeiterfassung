@@ -1,6 +1,14 @@
 import sqlite3
 from pathlib import Path
 
+
+def log_error(msg, exc):
+    # Minimal stderr logging to avoid silent DB failures
+    try:
+        print(f"DB error: {msg}: {exc}")
+    except Exception:
+        pass
+
 SCHEMA = '''
 CREATE TABLE IF NOT EXISTS customers (
     id INTEGER PRIMARY KEY,
@@ -50,8 +58,8 @@ def add_customer(path, name):
     try:
         conn.execute("INSERT INTO customers (name, address, email, phone) VALUES (?, ?, ?, ?)", (name, '', '', ''))
         conn.commit()
-    except Exception:
-        pass
+    except Exception as e:
+        log_error("add_customer", e)
     finally:
         conn.close()
 
@@ -70,8 +78,8 @@ def update_customer(path, name, address='', email='', phone=''):
     try:
         conn.execute("UPDATE customers SET address = ?, email = ?, phone = ? WHERE name = ?", (address, email, phone, name))
         conn.commit()
-    except Exception:
-        pass
+    except Exception as e:
+        log_error("update_customer", e)
     finally:
         conn.close()
 
@@ -80,9 +88,11 @@ def rename_customer(path, old_name, new_name):
     conn = get_connection(path)
     try:
         conn.execute("UPDATE customers SET name = ? WHERE name = ?", (new_name, old_name))
+        # Cascade to entries so UI lists remain consistent
+        conn.execute("UPDATE entries SET customer = ? WHERE customer = ?", (new_name, old_name))
         conn.commit()
-    except Exception:
-        pass
+    except Exception as e:
+        log_error("rename_customer", e)
     finally:
         conn.close()
 
@@ -98,8 +108,8 @@ def update_customer_full(path, old_name, new_name=None, address='', email='', ph
     try:
         conn.execute("UPDATE customers SET address = ?, email = ?, phone = ? WHERE name = ?", (address, email, phone, target_name))
         conn.commit()
-    except Exception:
-        pass
+    except Exception as e:
+        log_error("update_customer_full", e)
     finally:
         conn.close()
 
@@ -109,17 +119,22 @@ def delete_customer(path, name):
     try:
         conn.execute("DELETE FROM customers WHERE name = ?", (name,))
         conn.commit()
-    except Exception:
-        pass
+    except Exception as e:
+        log_error("delete_customer", e)
     finally:
         conn.close()
 
 
 def add_entry(path, customer, activity, start, end, duration):
     conn = get_connection(path)
-    conn.execute("INSERT INTO entries (customer,activity,start,end,duration_hours) VALUES (?,?,?,?,?)",
-                 (customer, activity, start, end, duration))
-    conn.commit(); conn.close()
+    try:
+        conn.execute("INSERT INTO entries (customer,activity,start,end,duration_hours) VALUES (?,?,?,?,?)",
+                     (customer, activity, start, end, duration))
+        conn.commit()
+    except Exception as e:
+        log_error("add_entry", e)
+    finally:
+        conn.close()
 
 
 def get_entries(path, customer=None):
@@ -153,8 +168,8 @@ def update_entry(path, entry_id, notes=''):
     try:
         conn.execute("UPDATE entries SET notes = ? WHERE id = ?", (notes, entry_id))
         conn.commit()
-    except Exception:
-        pass
+    except Exception as e:
+        log_error("update_entry", e)
     finally:
         conn.close()
 
@@ -164,7 +179,7 @@ def delete_entry(path, entry_id):
     try:
         conn.execute("DELETE FROM entries WHERE id = ?", (entry_id,))
         conn.commit()
-    except Exception:
-        pass
+    except Exception as e:
+        log_error("delete_entry", e)
     finally:
         conn.close()

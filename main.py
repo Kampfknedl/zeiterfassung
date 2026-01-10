@@ -150,7 +150,7 @@ KV = '''
                 font_size: '15sp'
                 bold: True
 
-    # Row 3: PDF Export & Timer
+    # Row 3: CSV Export & Timer
     BoxLayout:
         orientation: 'vertical'
         size_hint_y: None
@@ -165,7 +165,7 @@ KV = '''
                 size: self.size
                 radius: [10]
         Button:
-            text: 'PDF Report erstellen'
+            text: 'CSV Export erstellen'
             size_hint_y: None
             height: '50dp'
             on_release: root.export_pdf_with_dialog()
@@ -766,8 +766,8 @@ class RootWidget(BoxLayout):
                 start = dt.date().isoformat()
                 end = start
         except Exception:
-            start = None
-            end = None
+            self.show_error('Datum ungültig', 'Bitte Datum im Format dd.mm.yyyy eingeben.')
+            return
 
         if not start:
             now = datetime.datetime.now().isoformat()
@@ -1188,7 +1188,7 @@ class RootWidget(BoxLayout):
             
             content = BoxLayout(orientation='vertical', spacing=10, padding=15)
             content.add_widget(Label(
-                text='PDF erfolgreich erstellt!',
+                text='CSV erfolgreich erstellt!',
                 size_hint_y=None,
                 height='50dp',
                 font_size='18sp',
@@ -1202,7 +1202,7 @@ class RootWidget(BoxLayout):
                 font_size='14sp'
             ))
             content.add_widget(Label(
-                text='PDF wird jetzt geöffnet...',
+                text='CSV wird jetzt geöffnet...',
                 size_hint_y=None,
                 height='30dp',
                 font_size='14sp',
@@ -1222,7 +1222,7 @@ class RootWidget(BoxLayout):
             content.add_widget(btn)
             
             popup = Popup(
-                title='PDF Export',
+                title='CSV Export',
                 content=content,
                 size_hint=(.85, .5),
                 auto_dismiss=True
@@ -1235,7 +1235,7 @@ class RootWidget(BoxLayout):
             print(f"Show success error: {str(e)}\n{traceback.format_exc()}")
 
     def open_pdf_file(self, filepath, is_uri=False):
-        """Open PDF file with default viewer using Samsung/Android intent"""
+        """Open report CSV with default viewer using Samsung/Android intent"""
         try:
             from jnius import autoclass, cast
             Intent = autoclass('android.content.Intent')
@@ -1262,14 +1262,14 @@ class RootWidget(BoxLayout):
                     uri = Uri.fromFile(java_file)
 
             intent = Intent(Intent.ACTION_VIEW)
-            intent.setDataAndType(uri, 'application/pdf')
+            intent.setDataAndType(uri, 'text/csv')
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
 
             # Create chooser for better UX
             try:
-                title = cast('java.lang.CharSequence', String('PDF öffnen mit'))
+                title = cast('java.lang.CharSequence', String('CSV öffnen mit'))
                 chooser = Intent.createChooser(intent, title)
                 PythonActivity.mActivity.startActivity(chooser)
             except Exception:
@@ -1278,7 +1278,7 @@ class RootWidget(BoxLayout):
             
         except Exception as e:
             import traceback
-            error_msg = f"Fehler beim Öffnen der PDF:\n{str(e)}\n\n{traceback.format_exc()}"
+            error_msg = f"Fehler beim Öffnen der CSV:\n{str(e)}\n\n{traceback.format_exc()}"
             print(error_msg)
             # Don't show error popup here - just log it
             self.write_error_log(error_msg)

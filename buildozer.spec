@@ -14,7 +14,7 @@ version = 2.0
 requirements = python3,kivy,pillow,plyer,pyjnius
 
 # Android-specific requirements  
-android.permissions = WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,INTERNET,MANAGE_EXTERNAL_STORAGE
+android.permissions = WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,INTERNET
 android.api = 34
 android.minapi = 21
 android.archs = arm64-v8a,armeabi-v7a
