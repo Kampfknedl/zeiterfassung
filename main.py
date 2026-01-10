@@ -1435,8 +1435,9 @@ class RootWidget(BoxLayout):
             )
             
             print(f"[PDF] Adding title...")
-            # Title
-            story.append(Paragraph(f"<b>Zeiterfassung - {customer_name}</b>", title_style))
+            # Title - ohne HTML tags
+            title_text = f"Zeiterfassung - {customer_name}"
+            story.append(Paragraph(title_text, title_style))
             story.append(Spacer(1, 0.2*cm))
             
             # Created date
@@ -1447,7 +1448,8 @@ class RootWidget(BoxLayout):
             print(f"[PDF] Creating tables for {len(sorted_months)} months...")
             for month_key in sorted_months:
                 print(f"[PDF]   Month {month_key}...")
-                story.append(Paragraph(f"<b>Monat: {month_key}</b>", styles['Heading3']))
+                # Month heading ohne HTML tags
+                story.append(Paragraph(f"Monat: {month_key}", styles['Heading3']))
                 
                 rows_in_month = months_data[month_key]
                 month_total = 0.0
@@ -1464,8 +1466,8 @@ class RootWidget(BoxLayout):
                     except Exception as row_err:
                         print(f"[PDF]   ERROR in row: {row_err}")
                 
-                # Add month total
-                table_data.append(['', '<b>Summe</b>', f'<b>{month_total:.1f}</b>'])
+                # Add month total - ohne HTML tags, Styling via TableStyle
+                table_data.append(['', 'Summe', f'{month_total:.1f}'])
                 
                 # Create and style table
                 table = Table(table_data, colWidths=[2.5*cm, 9*cm, 2.5*cm])
@@ -1480,6 +1482,10 @@ class RootWidget(BoxLayout):
                     ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
                     ('FONTSIZE', (0, 1), (-1, -1), 8),
                     ('ALIGN', (2, 1), (2, -1), 'RIGHT'),
+                    # Style für die Summe-Zeile (letzte Zeile)
+                    ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e0e0e0')),
+                    ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, -1), (-1, -1), 9),
                 ]))
                 
                 story.append(table)
@@ -1488,12 +1494,14 @@ class RootWidget(BoxLayout):
             # Grand total
             print(f"[PDF] Adding grand total: {grand_total:.1f}...")
             story.append(Spacer(1, 0.2*cm))
-            grand_table_data = [['<b>GESAMTSTUNDEN:</b>', f'<b>{grand_total:.1f}</b>']]
+            # Grand total - ohne HTML tags
+            grand_table_data = [['GESAMTSTUNDEN:', f'{grand_total:.1f}']]
             grand_table = Table(grand_table_data, colWidths=[11*cm, 2.5*cm])
             grand_table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-                ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+                ('ALIGN', (0, 0), (-1, 0), 'LEFT'),
+                ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                 ('FONTSIZE', (0, 0), (-1, 0), 10),
                 ('PADDING', (0, 0), (-1, 0), 6),
