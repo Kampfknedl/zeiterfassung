@@ -179,6 +179,16 @@ KV = '''
             color: 1, 1, 1, 1
             font_size: '16sp'
             bold: True
+        Button:
+            text: 'Speicherort auswählen'
+            size_hint_y: None
+            height: '44dp'
+            on_release: root.open_export_settings()
+            background_normal: ''
+            background_color: 0.4, 0.4, 0.4, 1
+            color: 1, 1, 1, 1
+            font_size: '14sp'
+            bold: True
         BoxLayout:
             size_hint_y: None
             height: '48dp'
@@ -994,11 +1004,92 @@ class RootWidget(BoxLayout):
             if os.path.exists(settings_file):
                 with open(settings_file, 'r', encoding='utf-8') as f:
                     path = f.read().strip()
-                    if path and os.path.exists(path):
-                        return path
+                    if path:
+                        # Support Android SAF content URIs as well as filesystem paths
+                        if path.startswith('content://'):
+                            self._pdf_export_path = path
+                            return path
+                        if os.path.exists(path):
+                            self._pdf_export_path = path
+                            return path
         except Exception:
             pass
         return None
+
+    def open_export_settings(self):
+        """Popup to select and save export directory (one-time setting)."""
+        from kivy.uix.popup import Popup
+        from kivy.uix.label import Label
+        from kivy.uix.button import Button
+        from kivy.uix.textinput import TextInput
+        from kivy.uix.boxlayout import BoxLayout
+
+        current = self.get_saved_pdf_path() or self._pdf_export_path or ''
+
+        root = BoxLayout(orientation='vertical', spacing=8, padding=10)
+        root.add_widget(Label(text='Speicherort für Export', size_hint_y=None, height='30dp'))
+        path_input = TextInput(text=current, multiline=False, size_hint_y=None, height='40dp',
+                               background_normal='', background_color=(0.35, 0.35, 0.35, 1),
+                               foreground_color=(0.9, 0.9, 0.9, 1))
+        root.add_widget(path_input)
+
+        btns = BoxLayout(size_hint_y=None, height='44dp', spacing=8)
+        pick_btn = Button(text='Ordner wählen', background_normal='', background_color=(0.4, 0.4, 0.4, 1), color=(1, 1, 1, 1))
+        save_btn = Button(text='Speichern', background_normal='', background_color=(0.3, 0.6, 0.4, 1), color=(1, 1, 1, 1))
+        cancel_btn = Button(text='Abbrechen', background_normal='', background_color=(0.6, 0.4, 0.4, 1), color=(1, 1, 1, 1))
+        btns.add_widget(pick_btn)
+        btns.add_widget(save_btn)
+        btns.add_widget(cancel_btn)
+        root.add_widget(btns)
+
+        popup = Popup(title='Export-Einstellungen', content=root, size_hint=(.9, .45))
+
+        def do_pick(*_):
+            # Desktop: use tkinter; Android: use SAF via choose_pdf_directory
+            try:
+                import tkinter as tk
+                from tkinter import filedialog
+                print('[SETTINGS] Desktop directory picker opened')
+                win = tk.Tk(); win.withdraw(); win.attributes('-topmost', True)
+                d = filedialog.askdirectory(title='Speicherort auswählen')
+                win.destroy()
+                if d:
+                    path_input.text = d
+            except ImportError:
+                print('[SETTINGS] Android directory picker opened (SAF)')
+                try:
+                    self.choose_pdf_directory(lambda p: self.on_directory_chosen(p, popup=popup, update_input=path_input))
+                except Exception as e:
+                    print(f'[SETTINGS] Directory picker failed: {e}')
+
+        def do_save(*_):
+            p = path_input.text.strip()
+            if p:
+                self.save_pdf_path(p)
+            popup.dismiss()
+
+        pick_btn.bind(on_release=do_pick)
+        save_btn.bind(on_release=do_save)
+        cancel_btn.bind(on_release=lambda *_: popup.dismiss())
+        popup.open()
+
+    def on_directory_chosen(self, path, popup=None, update_input=None):
+        """Callback when a directory was chosen via SAF; saves and shows confirmation."""
+        try:
+            if path:
+                self.save_pdf_path(path)
+                if update_input is not None:
+                    update_input.text = path
+                from kivy.uix.popup import Popup
+                from kivy.uix.label import Label
+                p = Popup(title='Gespeichert', content=Label(text='Speicherort gespeichert'), size_hint=(.6, .3))
+                p.open()
+        finally:
+            if popup:
+                try:
+                    popup.dismiss()
+                except Exception:
+                    pass
 
     def save_pdf_path(self, path):
         """Save PDF export path to settings file"""
@@ -1063,27 +1154,27 @@ class RootWidget(BoxLayout):
                 Uri = autoclass('android.net.Uri')
                 DocumentsContract = autoclass('android.provider.DocumentsContract')
                 PythonActivity = autoclass('org.kivy.android.PythonActivity')
-                
+
                 if intent is not None:
                     tree_uri = intent.getData()
-                    
+
                     # Take persistable URI permission
                     content_resolver = PythonActivity.mActivity.getContentResolver()
                     content_resolver.takePersistableUriPermission(
                         tree_uri,
                         Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                     )
-                    
-                    # Convert URI to usable path
+
+                    # Convert URI to string
                     uri_string = tree_uri.toString()
-                    
+
                     # Save this path for future use
                     self.save_pdf_path(uri_string)
-                    
+
                     # Call the callback
                     if hasattr(self, '_directory_callback'):
                         self._directory_callback(uri_string)
-                        
+
         except Exception as e:
             import traceback
             print(f"Directory result error: {str(e)}\n{traceback.format_exc()}")
@@ -1528,6 +1619,83 @@ class RootWidget(BoxLayout):
             print(f"[PDF] Traceback:\n{traceback.format_exc()}")
             return None
 
+    def convert_csv_to_pdf_bytes(self, customer_name, rows, months_data, sorted_months, grand_total):
+        """Build the PDF and return bytes (for SAF URI writes)."""
+        print(f"\n[PDF] ===== CONVERT_CSV_TO_PDF_BYTES STARTED =====")
+        try:
+            from reportlab.lib.pagesizes import A4
+            from reportlab.lib.units import cm
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib import colors
+            from reportlab.lib.enums import TA_CENTER
+            import io
+
+            buffer = io.BytesIO()
+            doc = SimpleDocTemplate(buffer, pagesize=A4,
+                                    rightMargin=0.8*cm, leftMargin=0.8*cm,
+                                    topMargin=1*cm, bottomMargin=1*cm)
+            story = []
+            styles = getSampleStyleSheet()
+            title_style = ParagraphStyle('Title', parent=styles['Normal'], fontSize=14, textColor=colors.black, alignment=TA_CENTER, spaceAfter=10)
+            story.append(Paragraph(f"Zeiterfassung - {customer_name}", title_style))
+            story.append(Spacer(1, 0.2*cm))
+            story.append(Paragraph(f"Erstellt: {datetime.datetime.now().strftime('%d.%m.%Y %H:%M')}", styles['Normal']))
+            story.append(Spacer(1, 0.3*cm))
+
+            for month_key in sorted_months:
+                story.append(Paragraph(f"Monat: {month_key}", styles['Heading3']))
+                rows_in_month = months_data[month_key]
+                month_total = 0.0
+                table_data = [['Datum', 'Tätigkeit', 'Stunden']]
+                for r in rows_in_month:
+                    date = str(r[3] or '')[:10]
+                    act = str(r[2] or '')
+                    hrs = float(r[5] or 0)
+                    table_data.append([date, act, f'{hrs:.1f}'])
+                    month_total += hrs
+                table_data.append(['', 'Summe', f'{month_total:.1f}'])
+                table = Table(table_data, colWidths=[2.5*cm, 9*cm, 2.5*cm])
+                table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, 0), 9),
+                    ('BOTTOMPADDING', (0, 0), (-1, 0), 4),
+                    ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+                    ('FONTSIZE', (0, 1), (-1, -1), 8),
+                    ('ALIGN', (2, 1), (2, -1), 'RIGHT'),
+                    ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e0e0e0')),
+                    ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, -1), (-1, -1), 9),
+                ]))
+                story.append(table)
+                story.append(Spacer(1, 0.2*cm))
+
+            grand_table_data = [['GESAMTSTUNDEN:', f'{grand_total:.1f}']]
+            from reportlab.platypus import Table
+            grand_table = Table(grand_table_data, colWidths=[11*cm, 2.5*cm])
+            grand_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('ALIGN', (0, 0), (-1, 0), 'LEFT'),
+                ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('PADDING', (0, 0), (-1, 0), 6),
+            ]))
+            story.append(grand_table)
+
+            doc.build(story)
+            pdf_bytes = buffer.getvalue()
+            print(f"[PDF] ✅ Bytes generated: {len(pdf_bytes)}")
+            return pdf_bytes
+        except Exception as e:
+            print(f"[PDF] ❌ ERROR (bytes): {e}\n{traceback.format_exc()}")
+            return None
+
     def show_success_and_open_pdf(self, filepath, customer_name, is_uri=False):
         """Show success message and automatically open PDF"""
         try:
@@ -1603,6 +1771,7 @@ class RootWidget(BoxLayout):
 
             if is_uri:
                 uri = Uri.parse(filepath)
+                mime_type = 'application/pdf'
             else:
                 java_file = File(filepath)
                 try:
@@ -1612,9 +1781,11 @@ class RootWidget(BoxLayout):
                 except Exception as fp_error:
                     print(f"FileProvider failed: {fp_error}")
                     uri = Uri.fromFile(java_file)
+                # Determine MIME by extension
+                mime_type = 'application/pdf' if str(filepath).lower().endswith('.pdf') else 'text/csv'
 
             intent = Intent(Intent.ACTION_VIEW)
-            intent.setDataAndType(uri, 'text/csv')
+            intent.setDataAndType(uri, mime_type)
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
