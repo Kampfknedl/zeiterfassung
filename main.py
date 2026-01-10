@@ -1371,22 +1371,18 @@ class RootWidget(BoxLayout):
 
 class PoCApp(App):
     def build(self):
-        # Let the Builder create the RootWidget from the KV and return that instance
-        try:
-            root = Builder.load_string(KV)
-            if root is None:
-                print("ERROR: Builder.load_string returned None!")
-                # Fallback: create a simple widget
-                from kivy.uix.label import Label
-                return Label(text='ERROR: KV failed to load')
-            return root
-        except Exception as e:
-            print(f"ERROR in build(): {e}")
-            import traceback
-            traceback.print_exc()
-            # Fallback to minimal widget
-            from kivy.uix.label import Label
-            return Label(text=f'ERROR: {str(e)}')
+        # Load the KV - the RootWidget class is defined above
+        root = Builder.load_string(KV)
+        
+        # If Builder returns None, it means the KV didn't define a root widget properly
+        # This should not happen with our <RootWidget>: rule, but just in case...
+        if root is None:
+            print("[ERROR] Builder.load_string returned None!")
+            print("[ERROR] KV rule '<RootWidget>:' may not have instantiated properly")
+            # Return the RootWidget directly
+            root = RootWidget()
+        
+        return root
 
     def on_start(self):
         path = os.path.join(self.user_data_dir, 'stundenerfassung.db')
