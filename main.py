@@ -103,6 +103,7 @@ KV = '''
             background_normal: ''
             background_color: 0.35, 0.35, 0.35, 1
             foreground_color: 0.9, 0.9, 0.9, 1
+            on_focus: root.on_activity_focus(self, self.focus)
         BoxLayout:
             size_hint_y: None
             height: '44dp'
@@ -758,24 +759,36 @@ class RootWidget(BoxLayout):
         popup.open()
 
     def add_entry(self, activity, hours):
+        """Add new time entry"""
+        print(f"\n[ADD_ENTRY] ===== ADD_ENTRY CALLED =====")
+        print(f"[ADD_ENTRY] Activity: '{activity}'")
+        print(f"[ADD_ENTRY] Hours: '{hours}'")
+        
         customer = self.ids.customer_spinner.text
+        print(f"[ADD_ENTRY] Customer: '{customer}'")
         
         # Validate activity
         activity = activity.strip()
+        print(f"[ADD_ENTRY] Activity stripped: '{activity}'")
+        
         if not activity:
+            print(f"[ADD_ENTRY] ❌ Activity is empty!")
             self.show_error('Fehler', 'Bitte Tätigkeit eingeben')
             return
             
         try:
             hours_f = float(hours)
             if hours_f <= 0:
+                print(f"[ADD_ENTRY] ❌ Hours <= 0: {hours_f}")
                 self.show_error('Fehler', 'Stunden müssen größer als 0 sein')
                 return
-        except Exception:
+        except Exception as e:
+            print(f"[ADD_ENTRY] ❌ Invalid hours format: {hours}, Error: {e}")
             self.show_error('Fehler', 'Ungültiges Stundenformat')
             return
         
         if not customer or customer == '—':
+            print(f"[ADD_ENTRY] ❌ No customer selected")
             self.show_error('Fehler', 'Bitte Kunde auswählen')
             return
         
@@ -789,7 +802,9 @@ class RootWidget(BoxLayout):
                 # store as ISO date (no time)
                 start = dt.date().isoformat()
                 end = start
-        except Exception:
+                print(f"[ADD_ENTRY] Date from input: {start}")
+        except Exception as e:
+            print(f"[ADD_ENTRY] ❌ Invalid date: {date_text}, Error: {e}")
             self.show_error('Datum ungültig', 'Bitte Datum im Format dd.mm.yyyy eingeben.')
             return
 
@@ -797,19 +812,33 @@ class RootWidget(BoxLayout):
             now = datetime.datetime.now().isoformat()
             start = now
             end = now
+            print(f"[ADD_ENTRY] Using current time: {start}")
 
         path = self.get_db_path()
-        db.add_entry(path, customer, activity, start, end, hours_f)
+        print(f"[ADD_ENTRY] Saving to DB at: {path}")
+        
+        try:
+            db.add_entry(path, customer, activity, start, end, hours_f)
+            print(f"[ADD_ENTRY] ✅ Entry saved successfully!")
+            print(f"[ADD_ENTRY] Customer: {customer}, Activity: {activity}, Hours: {hours_f}")
+        except Exception as db_err:
+            print(f"[ADD_ENTRY] ❌ Database error: {db_err}")
+            import traceback
+            print(traceback.format_exc())
+            self.show_error('Speicherfehler', f'Eintrag konnte nicht gespeichert werden:\n{str(db_err)}')
+            return
         
         # Clear inputs after saving
+        print(f"[ADD_ENTRY] Clearing inputs...")
         self.ids.activity_input.text = ''
         self.ids.hours_input.text = '1.0'
         # Reset date to today
         self.ids.date_input.text = datetime.date.today().strftime('%d.%m.%Y')
         # Focus back to activity for next entry
         self.ids.activity_input.focus = True
-        
+        print(f"[ADD_ENTRY] Refreshing entries...")
         self.refresh_entries()
+        print(f"[ADD_ENTRY] ===== ENTRY ADDED COMPLETE =====\n")
 
     def start_timer(self):
         customer = self.ids.customer_spinner.text
