@@ -1093,14 +1093,23 @@ class RootWidget(BoxLayout):
 
     def export_pdf_with_dialog(self):
         """Export PDF to OneDrive if available, otherwise to Documents folder"""
+        print("\n" + "="*60)
+        print("[EXPORT] ========== PDF EXPORT STARTED ==========")
+        print("="*60)
+        
         try:
             selected_customer = self.ids.customer_spinner.text
+            print(f"[EXPORT] Selected customer: '{selected_customer}'")
+            
             if not selected_customer or selected_customer == '—':
+                print("[EXPORT] ❌ FEHLER: Kein Kunde ausgewählt")
                 self.show_error('Fehler', 'Bitte Kunde auswählen')
                 return
             
             # Create filename
-            default_filename = f"Zeiterfassung_{selected_customer.replace(' ', '_')}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+            default_filename = f"Zeiterfassung_{selected_customer.replace(' ', '_')}_{timestamp}.pdf"
+            print(f"[EXPORT] Filename: {default_filename}")
             
             # Try OneDrive first, then fallback to Documents
             export_dir = self.get_onedrive_dir()
@@ -1110,10 +1119,16 @@ class RootWidget(BoxLayout):
                 import tkinter as tk
                 from tkinter import filedialog
                 
+                print("[EXPORT] Running on DESKTOP (tkinter available)")
+                
                 # If no OneDrive found, use Documents
                 if not export_dir:
                     export_dir = self.get_documents_dir()
+                    print(f"[EXPORT] No OneDrive found, using Documents: {export_dir}")
+                else:
+                    print(f"[EXPORT] OneDrive found: {export_dir}")
                 
+                print(f"[EXPORT] Opening file dialog...")
                 root = tk.Tk()
                 root.withdraw()
                 root.attributes('-topmost', True)
@@ -1129,26 +1144,30 @@ class RootWidget(BoxLayout):
                 root.destroy()
                 
                 if filepath:
+                    print(f"[EXPORT] Selected: {filepath}")
                     export_dir = os.path.dirname(filepath)
                     filename = os.path.basename(filepath)
+                    print(f"[EXPORT] → Dir: {export_dir}")
+                    print(f"[EXPORT] → File: {filename}")
                     self.export_csv_to_path(export_dir, filename)
                 else:
-                    print("Export abgebrochen")
+                    print("[EXPORT] ⚠️  Export cancelled by user")
                     
             except ImportError:
+                print("[EXPORT] Running on ANDROID (no tkinter)")
                 # Android: Try OneDrive, fallback to Documents
                 if not export_dir:
                     export_dir = self.get_documents_dir()
-                    print("[ANDROID] OneDrive not found, using Documents folder")
+                    print(f"[EXPORT] Using Documents folder: {export_dir}")
                 else:
-                    print("[ANDROID] Saving PDF to OneDrive folder (auto-syncs!)")
+                    print(f"[EXPORT] Using OneDrive folder: {export_dir}")
                 
                 self.export_csv_to_path(export_dir, default_filename)
                 
         except Exception as e:
             import traceback
             error_msg = f"Fehler beim PDF-Export:\n{str(e)}\n\n{traceback.format_exc()}"
-            print(error_msg)
+            print(f"[EXPORT] ❌ EXCEPTION: {error_msg}")
             self.show_error('Export-Fehler', error_msg)
 
     def write_pdf_to_uri(self, uri_string, pdf_bytes, filename):
@@ -1200,18 +1219,23 @@ class RootWidget(BoxLayout):
 
     def export_csv_to_path(self, export_path, filename=None):
         """Export customer entries as PDF (with automatic CSV generation)"""
+        print(f"\n[EXPORT] ===== EXPORT_CSV_TO_PATH CALLED =====")
+        print(f"[EXPORT] Export path: '{export_path}'")
+        print(f"[EXPORT] Filename: '{filename}'")
+        
         selected_customer = self.ids.customer_spinner.text
         if not selected_customer or selected_customer == '—':
+            print(f"[EXPORT] ❌ Keine Kunde ausgewählt")
             self.show_error('Fehler', 'Bitte Kunde auswählen')
             return
 
-        print(f"[EXPORT] Starting PDF export for customer: {selected_customer}")
-        print(f"[EXPORT] Export path: {export_path}")
+        print(f"[EXPORT] Customer: '{selected_customer}'")
 
         rows = db.get_entries(self.get_db_path(), selected_customer)
-        print(f"[EXPORT] Found {len(rows)} entries")
+        print(f"[EXPORT] Found {len(rows)} entries in database")
         
         if not rows:
+            print(f"[EXPORT] ❌ No entries found for customer")
             self.show_error('Info', 'Keine Einträge vorhanden')
             return
 
@@ -1220,23 +1244,31 @@ class RootWidget(BoxLayout):
             from collections import defaultdict
 
             # Ensure export directory exists
+            print(f"[EXPORT] Checking if directory exists: {export_path}")
             if not os.path.exists(export_path):
-                print(f"[EXPORT] Creating directory: {export_path}")
+                print(f"[EXPORT] Creating directory...")
                 os.makedirs(export_path, exist_ok=True)
+                print(f"[EXPORT] ✅ Directory created")
+            else:
+                print(f"[EXPORT] ✅ Directory exists")
             
             if filename is None:
                 filename = f"Zeiterfassung_{selected_customer.replace(' ', '_')}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+                print(f"[EXPORT] Auto-generated filename: {filename}")
             
             # Use PDF filename (we'll generate PDF, not CSV)
             if not filename.endswith('.pdf'):
                 filename = filename.replace('.csv', '.pdf')
+                print(f"[EXPORT] Converted filename to PDF: {filename}")
             
             pdf_path = os.path.join(export_path, filename)
             csv_path = pdf_path.replace('.pdf', '.csv')
             
-            print(f"[EXPORT] Output PDF: {pdf_path}")
+            print(f"[EXPORT] Full PDF path: {pdf_path}")
+            print(f"[EXPORT] Full CSV path: {csv_path}")
 
             # Group entries by month
+            print(f"[EXPORT] Processing {len(rows)} entries...")
             months_data = defaultdict(list)
             for r in rows:
                 date_str = (r[3] or '')[:10]
@@ -1245,143 +1277,167 @@ class RootWidget(BoxLayout):
 
             sorted_months = sorted(months_data.keys(), reverse=True)
             grand_total = 0.0
+            
+            print(f"[EXPORT] Found {len(months_data)} months: {sorted_months}")
 
             # Write CSV file (for backup)
-            print(f"[EXPORT] Writing CSV: {csv_path}")
-            with open(csv_path, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f, delimiter=';')
-                
-                # Header
-                writer.writerow(['Zeiterfassung', selected_customer])
-                writer.writerow([])
-                writer.writerow([f'Erstellt am: {datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}'])
-                
-                cust = db.get_customer(self.get_db_path(), selected_customer)
-                if cust and cust[2]:
-                    writer.writerow([f'Adresse: {cust[2]}'])
-                if cust and cust[3]:
-                    writer.writerow([f'Email: {cust[3]}'])
-                if cust and cust[4]:
-                    writer.writerow([f'Telefon: {cust[4]}'])
-                
-                writer.writerow([])
-                writer.writerow(['Datum', 'Taetigkeit', 'Stunden'])
-
-                # Monthly entries
-                for month_key in sorted_months:
-                    rows_in_month = months_data[month_key]
-                    month_total = 0.0
-
-                    writer.writerow([f'Monat: {month_key}'])
-                    for r in rows_in_month:
-                        date = (r[3] or '')[:10]
-                        act = r[2] or ''
-                        hrs = float(r[5] or 0)
-                        writer.writerow([date, act, f'{hrs:.2f}'])
-                        month_total += hrs
-
-                    writer.writerow(['', f'Monatssumme {month_key}:', f'{month_total:.2f}'])
+            print(f"[EXPORT] Writing CSV file...")
+            try:
+                with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.writer(f, delimiter=';')
+                    
+                    # Header
+                    writer.writerow(['Zeiterfassung', selected_customer])
                     writer.writerow([])
-                    grand_total += month_total
+                    writer.writerow([f'Erstellt am: {datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}'])
+                    
+                    cust = db.get_customer(self.get_db_path(), selected_customer)
+                    if cust and len(cust) > 2 and cust[2]:
+                        writer.writerow([f'Adresse: {cust[2]}'])
+                    if cust and len(cust) > 3 and cust[3]:
+                        writer.writerow([f'Email: {cust[3]}'])
+                    if cust and len(cust) > 4 and cust[4]:
+                        writer.writerow([f'Telefon: {cust[4]}'])
+                    
+                    writer.writerow([])
+                    writer.writerow(['Datum', 'Taetigkeit', 'Stunden'])
 
-                # Grand total
-                writer.writerow([])
-                writer.writerow(['Gesamtstunden', f'{grand_total:.2f}'])
+                    # Monthly entries
+                    for month_key in sorted_months:
+                        rows_in_month = months_data[month_key]
+                        month_total = 0.0
 
-            print(f"[EXPORT] CSV written successfully")
+                        writer.writerow([f'Monat: {month_key}'])
+                        for r in rows_in_month:
+                            date = (r[3] or '')[:10]
+                            act = r[2] or ''
+                            hrs = float(r[5] or 0)
+                            writer.writerow([date, act, f'{hrs:.2f}'])
+                            month_total += hrs
+
+                        writer.writerow(['', f'Monatssumme {month_key}:', f'{month_total:.2f}'])
+                        writer.writerow([])
+                        grand_total += month_total
+
+                    # Grand total
+                    writer.writerow([])
+                    writer.writerow(['Gesamtstunden', f'{grand_total:.2f}'])
+                
+                print(f"[EXPORT] ✅ CSV file written successfully")
+                print(f"[EXPORT] CSV location: {csv_path}")
+                print(f"[EXPORT] Total hours: {grand_total:.2f}")
+            except Exception as e:
+                print(f"[EXPORT] ❌ Error writing CSV: {e}")
+                raise
 
             # Automatische PDF-Konvertierung
-            print(f"[EXPORT] Converting to PDF...")
-            pdf_path = self.convert_csv_to_pdf(csv_path, selected_customer, rows, months_data, sorted_months, grand_total)
-            
-            if pdf_path and os.path.exists(pdf_path):
-                print(f"[EXPORT] ✅ PDF created: {pdf_path}")
-                self.show_success_and_open_pdf(pdf_path, selected_customer, is_uri=False)
-            else:
-                print(f"[EXPORT] ⚠️  PDF creation failed, showing CSV instead")
-                self.show_success_and_open_pdf(csv_path, selected_customer, is_uri=False)
+            print(f"\n[EXPORT] Starting PDF conversion...")
+            try:
+                pdf_path = self.convert_csv_to_pdf(csv_path, selected_customer, rows, months_data, sorted_months, grand_total)
+                
+                if pdf_path and os.path.exists(pdf_path):
+                    file_size = os.path.getsize(pdf_path)
+                    print(f"[EXPORT] ✅ PDF successfully created!")
+                    print(f"[EXPORT] Location: {pdf_path}")
+                    print(f"[EXPORT] Size: {file_size} bytes")
+                    self.show_success_and_open_pdf(pdf_path, selected_customer, is_uri=False)
+                else:
+                    print(f"[EXPORT] ⚠️  PDF path returned but file doesn't exist: {pdf_path}")
+                    print(f"[EXPORT] Using CSV instead")
+                    self.show_success_and_open_pdf(csv_path, selected_customer, is_uri=False)
+            except Exception as pdf_err:
+                print(f"[EXPORT] ⚠️  PDF conversion failed: {pdf_err}")
+                print(f"[EXPORT] Using CSV instead")
 
         except Exception as e:
             import traceback
             error_msg = f"Fehler beim Export:\n{str(e)}\n\n{traceback.format_exc()}"
-            print(f"[EXPORT] ❌ ERROR: {error_msg}")
+            print(f"[EXPORT] ❌ EXCEPTION: {error_msg}")
             self.show_error('Export-Fehler', error_msg)
             self.write_error_log(error_msg)
+        
+        print("[EXPORT] ===== EXPORT COMPLETE =====\n")
 
     def convert_csv_to_pdf(self, csv_path, customer_name, rows, months_data, sorted_months, grand_total):
         """Convert CSV to PDF using reportlab"""
+        print(f"\n[PDF] ===== CONVERT_CSV_TO_PDF STARTED =====")
         try:
             from reportlab.lib.pagesizes import A4
             from reportlab.lib.units import cm
             from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
             from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
             from reportlab.lib import colors
-            from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
+            from reportlab.lib.enums import TA_CENTER
             
             pdf_path = csv_path.replace('.csv', '.pdf')
+            print(f"[PDF] PDF path: {pdf_path}")
+            print(f"[PDF] Months: {len(sorted_months)} months")
+            print(f"[PDF] Rows: {len(rows)} total rows")
             
-            print(f"[PDF] Starting PDF generation...")
-            print(f"[PDF] Months: {sorted_months}")
-            print(f"[PDF] Rows count: {len(rows)}")
+            # Check if CSV file exists
+            if not os.path.exists(csv_path):
+                print(f"[PDF] ❌ CSV file doesn't exist: {csv_path}")
+                raise FileNotFoundError(f"CSV file not found: {csv_path}")
             
+            # Create PDF directory if needed
+            pdf_dir = os.path.dirname(pdf_path)
+            if pdf_dir and not os.path.exists(pdf_dir):
+                os.makedirs(pdf_dir, exist_ok=True)
+                print(f"[PDF] Created PDF directory: {pdf_dir}")
+            
+            print(f"[PDF] Creating SimpleDocTemplate...")
             # Create PDF
             doc = SimpleDocTemplate(pdf_path, pagesize=A4, 
-                                   rightMargin=2*cm, leftMargin=2*cm,
-                                   topMargin=2*cm, bottomMargin=2*cm)
+                                   rightMargin=1.5*cm, leftMargin=1.5*cm,
+                                   topMargin=1.5*cm, bottomMargin=1.5*cm)
             
             story = []
             styles = getSampleStyleSheet()
             
-            # Custom styles
+            # Title style
             title_style = ParagraphStyle(
                 'CustomTitle',
                 parent=styles['Heading1'],
-                fontSize=18,
-                textColor=colors.HexColor('#4a4a4a'),
-                spaceAfter=12,
-                alignment=TA_CENTER
-            )
-            
-            heading_style = ParagraphStyle(
-                'CustomHeading',
-                parent=styles['Heading2'],
-                fontSize=14,
-                textColor=colors.HexColor('#5a5a5a'),
+                fontSize=16,
+                textColor=colors.HexColor('#333333'),
                 spaceAfter=10,
-                spaceBefore=10
+                alignment=TA_CENTER
             )
             
             # Title
             story.append(Paragraph(f"Zeiterfassung - {customer_name}", title_style))
-            story.append(Spacer(1, 0.5*cm))
+            story.append(Spacer(1, 0.3*cm))
             
             # Customer info
+            print(f"[PDF] Adding customer info...")
             cust = db.get_customer(self.get_db_path(), customer_name)
             info_data = [
-                ['Erstellt am:', datetime.datetime.now().strftime("%d.%m.%Y %H:%M")]
+                ['Erstellt:', datetime.datetime.now().strftime("%d.%m.%Y %H:%M")]
             ]
-            if cust and cust[2]:
-                info_data.append(['Adresse:', cust[2]])
-            if cust and cust[3]:
-                info_data.append(['Email:', cust[3]])
-            if cust and cust[4]:
-                info_data.append(['Telefon:', cust[4]])
+            if cust and len(cust) > 2 and cust[2]:
+                info_data.append(['Adresse:', str(cust[2])])
+            if cust and len(cust) > 3 and cust[3]:
+                info_data.append(['Email:', str(cust[3])])
+            if cust and len(cust) > 4 and cust[4]:
+                info_data.append(['Tel:', str(cust[4])])
             
-            info_table = Table(info_data, colWidths=[4*cm, 13*cm])
+            info_table = Table(info_data, colWidths=[3*cm, 14*cm])
             info_table.setStyle(TableStyle([
-                ('FONT', (0, 0), (-1, -1), 'Helvetica', 10),
-                ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#5a5a5a')),
+                ('FONT', (0, 0), (-1, -1), 'Helvetica', 9),
+                ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#555555')),
                 ('ALIGN', (0, 0), (0, -1), 'LEFT'),
                 ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 2),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 2),
             ]))
             story.append(info_table)
-            story.append(Spacer(1, 0.8*cm))
+            story.append(Spacer(1, 0.5*cm))
             
             # Monthly entries
-            print(f"[PDF] Processing {len(sorted_months)} months...")
+            print(f"[PDF] Adding monthly entries...")
             for month_key in sorted_months:
-                print(f"[PDF]   Month: {month_key}")
-                story.append(Paragraph(f"Monat: {month_key}", heading_style))
+                print(f"[PDF]   Processing month: {month_key}")
+                story.append(Paragraph(f"<b>Monat: {month_key}</b>", styles['Heading2']))
                 
                 rows_in_month = months_data[month_key]
                 month_total = 0.0
@@ -1389,63 +1445,70 @@ class RootWidget(BoxLayout):
                 table_data = [['Datum', 'Tätigkeit', 'Stunden']]
                 
                 for r in rows_in_month:
-                    date = (r[3] or '')[:10]
-                    act = r[2] or ''
-                    hrs = float(r[5] or 0)
+                    date = str(r[3] or '')[:10]
+                    act = str(r[2] or '')
+                    try:
+                        hrs = float(r[5] or 0)
+                    except:
+                        hrs = 0.0
+                    
                     table_data.append([date, act, f'{hrs:.2f}'])
                     month_total += hrs
-                    print(f"[PDF]     Entry: {date} | {act[:20]} | {hrs}")
                 
-                table_data.append(['', 'Monatssumme:', f'{month_total:.2f}'])
+                table_data.append(['', '<b>Summe</b>', f'<b>{month_total:.2f}</b>'])
                 
-                t = Table(table_data, colWidths=[3.5*cm, 10*cm, 3.5*cm])
-                t.setStyle(TableStyle([
-                    # Header row
-                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#7a8a9a')),
-                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                    ('FONT', (0, 0), (-1, 0), 'Helvetica-Bold', 11),
+                table = Table(table_data, colWidths=[3.5*cm, 10*cm, 3.5*cm])
+                table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#cccccc')),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+                    ('FONT', (0, 0), (-1, 0), 'Helvetica-Bold', 10),
                     ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
-                    ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
-                    
-                    # Data rows
-                    ('FONT', (0, 1), (-1, -2), 'Helvetica', 10),
+                    ('FONT', (0, 1), (-1, -1), 'Helvetica', 9),
                     ('ALIGN', (2, 1), (2, -1), 'RIGHT'),
-                    ('GRID', (0, 0), (-1, -2), 0.5, colors.grey),
-                    ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#f5f5f5')]),
-                    
-                    # Total row
-                    ('FONT', (0, -1), (-1, -1), 'Helvetica-Bold', 11),
-                    ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e0e0e0')),
-                    ('TOPPADDING', (0, -1), (-1, -1), 8),
-                    ('BOTTOMPADDING', (0, -1), (-1, -1), 8),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                    ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#f9f9f9')]),
+                    ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e8e8e8')),
+                    ('FONT', (0, -1), (-1, -1), 'Helvetica-Bold', 9),
                 ]))
                 
-                story.append(t)
-                story.append(Spacer(1, 0.5*cm))
+                story.append(table)
+                story.append(Spacer(1, 0.3*cm))
             
             # Grand total
-            grand_total_data = [['Gesamtstunden:', f'{grand_total:.2f}']]
-            grand_table = Table(grand_total_data, colWidths=[13.5*cm, 3.5*cm])
+            print(f"[PDF] Adding grand total: {grand_total:.2f} hours")
+            story.append(Spacer(1, 0.3*cm))
+            grand_data = [['<b>GESAMTSTUNDEN</b>', f'<b>{grand_total:.2f}</b>']]
+            grand_table = Table(grand_data, colWidths=[14*cm, 3.5*cm])
             grand_table.setStyle(TableStyle([
-                ('FONT', (0, 0), (-1, -1), 'Helvetica-Bold', 14),
                 ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#7a8a9a')),
-                ('TEXTCOLOR', (0, 0), (-1, -1), colors.whitesmoke),
+                ('TEXTCOLOR', (0, 0), (-1, -1), colors.white),
+                ('FONT', (0, 0), (-1, -1), 'Helvetica-Bold', 12),
                 ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
-                ('PADDING', (0, 0), (-1, -1), 12),
-                ('BOX', (0, 0), (-1, -1), 2, colors.HexColor('#5a6a7a')),
+                ('PADDING', (0, 0), (-1, -1), 10),
             ]))
-            story.append(Spacer(1, 0.5*cm))
             story.append(grand_table)
             
             # Build PDF
+            print(f"[PDF] Building PDF...")
             doc.build(story)
             
-            print(f"PDF erfolgreich erstellt: {pdf_path}")
-            return pdf_path
+            # Verify file was created
+            if os.path.exists(pdf_path):
+                file_size = os.path.getsize(pdf_path)
+                print(f"[PDF] ✅ PDF created successfully!")
+                print(f"[PDF] Size: {file_size} bytes")
+                print(f"[PDF] ===== CONVERT COMPLETE =====\n")
+                return pdf_path
+            else:
+                print(f"[PDF] ❌ PDF file was not created")
+                return None
             
         except Exception as e:
             import traceback
-            print(f"PDF Konvertierung fehlgeschlagen: {str(e)}\n{traceback.format_exc()}")
+            error_trace = traceback.format_exc()
+            print(f"[PDF] ❌ ERROR: {str(e)}")
+            print(f"[PDF] Traceback:\n{error_trace}")
+            print(f"[PDF] ===== CONVERT FAILED =====\n")
             return None
 
     def show_success_and_open_pdf(self, filepath, customer_name, is_uri=False):
