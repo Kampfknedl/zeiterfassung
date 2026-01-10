@@ -1062,24 +1062,57 @@ class RootWidget(BoxLayout):
             if hasattr(self, '_directory_callback'):
                 self._directory_callback(self.get_documents_dir())
 
+    def get_onedrive_dir(self):
+        """Try to get OneDrive Documents folder if OneDrive is installed on Android"""
+        try:
+            # Possible OneDrive sync locations on Android
+            possible_paths = [
+                "/storage/emulated/0/Documents/Microsoft OneDrive",
+                "/sdcard/Documents/Microsoft OneDrive", 
+                "/storage/emulated/0/Microsoft OneDrive",
+                "/sdcard/Microsoft OneDrive",
+                os.path.expanduser("~/OneDrive"),  # Desktop fallback
+            ]
+            
+            for path in possible_paths:
+                if os.path.exists(path) and os.path.isdir(path):
+                    print(f"[ONEDRIVE] Found OneDrive folder: {path}")
+                    # Create Zeiterfassung subfolder if needed
+                    ze_path = os.path.join(path, "Zeiterfassung")
+                    if not os.path.exists(ze_path):
+                        os.makedirs(ze_path, exist_ok=True)
+                        print(f"[ONEDRIVE] Created Zeiterfassung subfolder: {ze_path}")
+                    return ze_path
+            
+            print("[ONEDRIVE] OneDrive folder not found, will use Documents instead")
+            return None
+            
+        except Exception as e:
+            print(f"[ONEDRIVE] Error checking for OneDrive: {e}")
+            return None
+
     def export_pdf_with_dialog(self):
-        """Export PDF to Documents folder (simple & reliable)"""
+        """Export PDF to OneDrive if available, otherwise to Documents folder"""
         try:
             selected_customer = self.ids.customer_spinner.text
             if not selected_customer or selected_customer == '—':
                 self.show_error('Fehler', 'Bitte Kunde auswählen')
                 return
             
-            # Get Documents directory (works on both desktop and Android)
-            docs_dir = self.get_documents_dir()
-            
             # Create filename
             default_filename = f"Zeiterfassung_{selected_customer.replace(' ', '_')}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+            
+            # Try OneDrive first, then fallback to Documents
+            export_dir = self.get_onedrive_dir()
             
             # On desktop, ask where to save
             try:
                 import tkinter as tk
                 from tkinter import filedialog
+                
+                # If no OneDrive found, use Documents
+                if not export_dir:
+                    export_dir = self.get_documents_dir()
                 
                 root = tk.Tk()
                 root.withdraw()
@@ -1090,7 +1123,7 @@ class RootWidget(BoxLayout):
                     defaultextension=".pdf",
                     filetypes=[("PDF Dateien", "*.pdf"), ("Alle Dateien", "*.*")],
                     initialfile=default_filename,
-                    initialdir=docs_dir
+                    initialdir=export_dir
                 )
                 
                 root.destroy()
@@ -1103,9 +1136,14 @@ class RootWidget(BoxLayout):
                     print("Export abgebrochen")
                     
             except ImportError:
-                # Android: Save directly to Documents folder
-                print("[ANDROID] Using Documents folder for PDF export")
-                self.export_csv_to_path(docs_dir, default_filename)
+                # Android: Try OneDrive, fallback to Documents
+                if not export_dir:
+                    export_dir = self.get_documents_dir()
+                    print("[ANDROID] OneDrive not found, using Documents folder")
+                else:
+                    print("[ANDROID] Saving PDF to OneDrive folder (auto-syncs!)")
+                
+                self.export_csv_to_path(export_dir, default_filename)
                 
         except Exception as e:
             import traceback
