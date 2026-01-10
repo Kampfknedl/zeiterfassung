@@ -1063,62 +1063,55 @@ class RootWidget(BoxLayout):
                 self._directory_callback(self.get_documents_dir())
 
     def export_pdf_with_dialog(self):
-        """Export CSV with file save dialog (user can choose OneDrive, etc.)"""
+        """Export PDF to Documents folder (simple & reliable)"""
         try:
-            # Desktop: Use tkinter file dialog
-            import tkinter as tk
-            from tkinter import filedialog
-            
-            root = tk.Tk()
-            root.withdraw()
-            root.attributes('-topmost', True)
-            
             selected_customer = self.ids.customer_spinner.text
-            default_filename = f"Zeiterfassung_{selected_customer.replace(' ', '_')}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            if not selected_customer or selected_customer == '—':
+                self.show_error('Fehler', 'Bitte Kunde auswählen')
+                return
             
-            filepath = filedialog.asksaveasfilename(
-                title="CSV speichern",
-                defaultextension=".csv",
-                filetypes=[("CSV Dateien", "*.csv"), ("Alle Dateien", "*.*")],
-                initialfile=default_filename
-            )
+            # Get Documents directory (works on both desktop and Android)
+            docs_dir = self.get_documents_dir()
             
-            root.destroy()
+            # Create filename
+            default_filename = f"Zeiterfassung_{selected_customer.replace(' ', '_')}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
             
-            if filepath:
-                # Extract directory from full filepath
-                export_dir = os.path.dirname(filepath)
-                filename = os.path.basename(filepath)
-                self.export_csv_to_path(export_dir, filename)
-            else:
-                print("CSV Export abgebrochen")
-                
-        except ImportError:
-            # Android: Use Android file picker (SAF)
+            # On desktop, ask where to save
             try:
-                from jnius import autoclass
-                Intent = autoclass('android.content.Intent')
-                PythonActivity = autoclass('org.kivy.android.PythonActivity')
+                import tkinter as tk
+                from tkinter import filedialog
                 
-                selected_customer = self.ids.customer_spinner.text
-                default_filename = f"Zeiterfassung_{selected_customer.replace(' ', '_')}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                root = tk.Tk()
+                root.withdraw()
+                root.attributes('-topmost', True)
                 
-                intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
-                intent.addCategory(Intent.CATEGORY_OPENABLE)
-                intent.setType("text/csv")
-                intent.putExtra(Intent.EXTRA_TITLE, default_filename)
+                filepath = filedialog.asksaveasfilename(
+                    title="PDF speichern",
+                    defaultextension=".pdf",
+                    filetypes=[("PDF Dateien", "*.pdf"), ("Alle Dateien", "*.*")],
+                    initialfile=default_filename,
+                    initialdir=docs_dir
+                )
                 
-                # Store customer for later use in result handler
-                self._export_customer = selected_customer
+                root.destroy()
                 
-                PythonActivity.mActivity.startActivityForResult(intent, 43)
+                if filepath:
+                    export_dir = os.path.dirname(filepath)
+                    filename = os.path.basename(filepath)
+                    self.export_csv_to_path(export_dir, filename)
+                else:
+                    print("Export abgebrochen")
+                    
+            except ImportError:
+                # Android: Save directly to Documents folder
+                print("[ANDROID] Using Documents folder for PDF export")
+                self.export_csv_to_path(docs_dir, default_filename)
                 
-            except Exception as e:
-                import traceback
-                print(f"Android file dialog error: {str(e)}\n{traceback.format_exc()}")
-                # Fallback to default path
-                default_path = self.get_documents_dir()
-                self.export_csv_to_path(default_path, None)
+        except Exception as e:
+            import traceback
+            error_msg = f"Fehler beim PDF-Export:\n{str(e)}\n\n{traceback.format_exc()}"
+            print(error_msg)
+            self.show_error('Export-Fehler', error_msg)
 
     def write_pdf_to_uri(self, uri_string, pdf_bytes, filename):
         """Write PDF bytes to Android content URI (for OneDrive, etc.)"""
@@ -1168,13 +1161,18 @@ class RootWidget(BoxLayout):
         return None
 
     def export_csv_to_path(self, export_path, filename=None):
-        """Export customer entries as CSV (simple, reliable format)"""
+        """Export customer entries as PDF (with automatic CSV generation)"""
         selected_customer = self.ids.customer_spinner.text
         if not selected_customer or selected_customer == '—':
             self.show_error('Fehler', 'Bitte Kunde auswählen')
             return
 
+        print(f"[EXPORT] Starting PDF export for customer: {selected_customer}")
+        print(f"[EXPORT] Export path: {export_path}")
+
         rows = db.get_entries(self.get_db_path(), selected_customer)
+        print(f"[EXPORT] Found {len(rows)} entries")
+        
         if not rows:
             self.show_error('Info', 'Keine Einträge vorhanden')
             return
@@ -1183,14 +1181,22 @@ class RootWidget(BoxLayout):
             import csv
             from collections import defaultdict
 
-            # Use local directory
+            # Ensure export directory exists
             if not os.path.exists(export_path):
+                print(f"[EXPORT] Creating directory: {export_path}")
                 os.makedirs(export_path, exist_ok=True)
             
             if filename is None:
-                filename = f"Zeiterfassung_{selected_customer.replace(' ', '_')}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                filename = f"Zeiterfassung_{selected_customer.replace(' ', '_')}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
             
-            csv_path = os.path.join(export_path, filename)
+            # Use PDF filename (we'll generate PDF, not CSV)
+            if not filename.endswith('.pdf'):
+                filename = filename.replace('.csv', '.pdf')
+            
+            pdf_path = os.path.join(export_path, filename)
+            csv_path = pdf_path.replace('.pdf', '.csv')
+            
+            print(f"[EXPORT] Output PDF: {pdf_path}")
 
             # Group entries by month
             months_data = defaultdict(list)
@@ -1202,7 +1208,8 @@ class RootWidget(BoxLayout):
             sorted_months = sorted(months_data.keys(), reverse=True)
             grand_total = 0.0
 
-            # Write CSV file
+            # Write CSV file (for backup)
+            print(f"[EXPORT] Writing CSV: {csv_path}")
             with open(csv_path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f, delimiter=';')
                 
@@ -1243,14 +1250,23 @@ class RootWidget(BoxLayout):
                 writer.writerow([])
                 writer.writerow(['Gesamtstunden', f'{grand_total:.2f}'])
 
+            print(f"[EXPORT] CSV written successfully")
+
             # Automatische PDF-Konvertierung
+            print(f"[EXPORT] Converting to PDF...")
             pdf_path = self.convert_csv_to_pdf(csv_path, selected_customer, rows, months_data, sorted_months, grand_total)
             
-            self.show_success_and_open_pdf(pdf_path if pdf_path else csv_path, selected_customer, is_uri=False)
+            if pdf_path and os.path.exists(pdf_path):
+                print(f"[EXPORT] ✅ PDF created: {pdf_path}")
+                self.show_success_and_open_pdf(pdf_path, selected_customer, is_uri=False)
+            else:
+                print(f"[EXPORT] ⚠️  PDF creation failed, showing CSV instead")
+                self.show_success_and_open_pdf(csv_path, selected_customer, is_uri=False)
 
         except Exception as e:
             import traceback
             error_msg = f"Fehler beim Export:\n{str(e)}\n\n{traceback.format_exc()}"
+            print(f"[EXPORT] ❌ ERROR: {error_msg}")
             self.show_error('Export-Fehler', error_msg)
             self.write_error_log(error_msg)
 
