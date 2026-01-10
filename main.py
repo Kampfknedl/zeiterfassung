@@ -1287,12 +1287,16 @@ class RootWidget(BoxLayout):
                     
             except ImportError:
                 print("[EXPORT] Running on ANDROID (no tkinter)")
-                # Android: Try OneDrive, fallback to Documents
-                if not export_dir:
-                    export_dir = self.get_documents_dir()
-                    print(f"[EXPORT] Using Documents folder: {export_dir}")
-                else:
-                    print(f"[EXPORT] Using OneDrive folder: {export_dir}")
+                # Android: Use public /sdcard/Documents instead of app-internal
+                # This allows user to find files in standard location
+                export_dir = "/sdcard/Documents/Zeiterfassung"
+                print(f"[EXPORT] Using public Documents folder: {export_dir}")
+                
+                # Ensure directory exists
+                try:
+                    os.makedirs(export_dir, exist_ok=True)
+                except Exception as e:
+                    print(f"[EXPORT] Warning: Could not create dir: {e}")
                 
                 self.export_csv_to_path(export_dir, default_filename)
                 
@@ -1764,6 +1768,7 @@ class RootWidget(BoxLayout):
                 title=f'{file_type} Export',
                 content=content,
                 size_hint=(.85, .5),
+                pos_hint={'center_x': 0.5, 'center_y': 0.5},
                 auto_dismiss=True
             )
             btn.bind(on_release=popup.dismiss)
