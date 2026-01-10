@@ -189,6 +189,16 @@ KV = '''
             color: 1, 1, 1, 1
             font_size: '14sp'
             bold: True
+        Button:
+            text: 'Drucken'
+            size_hint_y: None
+            height: '44dp'
+            on_release: root.print_last_export()
+            background_normal: ''
+            background_color: 0.4, 0.4, 0.4, 1
+            color: 1, 1, 1, 1
+            font_size: '14sp'
+            bold: True
         BoxLayout:
             size_hint_y: None
             height: '48dp'
@@ -269,6 +279,8 @@ class RootWidget(BoxLayout):
         self._timer_paused_time = 0  # accumulated paused seconds
         self._pause_start = None      # when pause was pressed
         self._pdf_export_path = None  # User-selected PDF export directory
+        self._last_export_path = None
+        self._last_export_is_uri = False
 
     def on_kv_post(self, base_widget):
         # Ensure DB initialized before attempting queries
@@ -1699,6 +1711,9 @@ class RootWidget(BoxLayout):
     def show_success_and_open_pdf(self, filepath, customer_name, is_uri=False):
         """Show success message and automatically open PDF"""
         try:
+            # Track last export for printing/share
+            self._last_export_path = filepath
+            self._last_export_is_uri = bool(is_uri)
             # Automatically open the PDF
             self.open_pdf_file(filepath, is_uri=is_uri)
             
@@ -1812,6 +1827,26 @@ class RootWidget(BoxLayout):
         except Exception as e:
             import traceback
             error_msg = f"Fehler beim Öffnen der Datei:\n{str(e)}\n\n{traceback.format_exc()}"
+            print(error_msg)
+            self.write_error_log(error_msg)
+
+    def print_last_export(self):
+        """Open Android share sheet for PDF printing (last exported file)."""
+        try:
+            if not self._last_export_path:
+                self.show_error('Drucken', 'Kein exportiertes Dokument vorhanden.')
+                return
+            # Require PDF for printing
+            is_pdf = self._last_export_is_uri or str(self._last_export_path).lower().endswith('.pdf')
+            if not is_pdf:
+                self.show_error('Drucken', 'Letzte Datei ist kein PDF. Bitte zuerst PDF exportieren.')
+                return
+            ok = self.share_file_fileprovider(self._last_export_path, mime_type='application/pdf', is_uri=self._last_export_is_uri)
+            if not ok:
+                self.show_error('Drucken', 'Druck-Freigabe fehlgeschlagen.')
+        except Exception as e:
+            import traceback
+            error_msg = f"Fehler beim Drucken:\n{str(e)}\n\n{traceback.format_exc()}"
             print(error_msg)
             self.write_error_log(error_msg)
 
