@@ -1266,6 +1266,10 @@ class RootWidget(BoxLayout):
             
             pdf_path = csv_path.replace('.csv', '.pdf')
             
+            print(f"[PDF] Starting PDF generation...")
+            print(f"[PDF] Months: {sorted_months}")
+            print(f"[PDF] Rows count: {len(rows)}")
+            
             # Create PDF
             doc = SimpleDocTemplate(pdf_path, pagesize=A4, 
                                    rightMargin=2*cm, leftMargin=2*cm,
@@ -1320,7 +1324,9 @@ class RootWidget(BoxLayout):
             story.append(Spacer(1, 0.8*cm))
             
             # Monthly entries
+            print(f"[PDF] Processing {len(sorted_months)} months...")
             for month_key in sorted_months:
+                print(f"[PDF]   Month: {month_key}")
                 story.append(Paragraph(f"Monat: {month_key}", heading_style))
                 
                 rows_in_month = months_data[month_key]
@@ -1334,6 +1340,7 @@ class RootWidget(BoxLayout):
                     hrs = float(r[5] or 0)
                     table_data.append([date, act, f'{hrs:.2f}'])
                     month_total += hrs
+                    print(f"[PDF]     Entry: {date} | {act[:20]} | {hrs}")
                 
                 table_data.append(['', 'Monatssumme:', f'{month_total:.2f}'])
                 
@@ -1450,8 +1457,9 @@ class RootWidget(BoxLayout):
             print(f"Show success error: {str(e)}\n{traceback.format_exc()}")
 
     def open_pdf_file(self, filepath, is_uri=False):
-        """Open report CSV with default viewer using Samsung/Android intent"""
+        """Open report with default viewer"""
         try:
+            # Try Android first
             from jnius import autoclass, cast
             Intent = autoclass('android.content.Intent')
             Uri = autoclass('android.net.Uri')
@@ -1460,20 +1468,15 @@ class RootWidget(BoxLayout):
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
 
             if is_uri:
-                # Already a content URI
                 uri = Uri.parse(filepath)
             else:
-                # Convert file path to URI
                 java_file = File(filepath)
-                
-                # Try FileProvider first (Android 7+)
                 try:
                     FileProvider = autoclass('androidx.core.content.FileProvider')
                     authority = self.get_fileprovider_authority()
                     uri = FileProvider.getUriForFile(PythonActivity.mActivity, authority, java_file)
                 except Exception as fp_error:
                     print(f"FileProvider failed: {fp_error}")
-                    # Fallback to file:// URI for older devices
                     uri = Uri.fromFile(java_file)
 
             intent = Intent(Intent.ACTION_VIEW)
@@ -1482,20 +1485,29 @@ class RootWidget(BoxLayout):
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
 
-            # Create chooser for better UX
             try:
-                title = cast('java.lang.CharSequence', String('CSV öffnen mit'))
+                title = cast('java.lang.CharSequence', String('Öffnen mit'))
                 chooser = Intent.createChooser(intent, title)
                 PythonActivity.mActivity.startActivity(chooser)
             except Exception:
-                # Fallback: direct intent
                 PythonActivity.mActivity.startActivity(intent)
             
+        except ImportError:
+            # Desktop fallback - open file with default application
+            import subprocess
+            try:
+                if filepath.endswith('.pdf'):
+                    # Open PDF with default viewer
+                    subprocess.Popen(['start', filepath], shell=True)
+                else:
+                    subprocess.Popen(['start', filepath], shell=True)
+                print(f"[DESKTOP] Opened: {filepath}")
+            except Exception as e:
+                print(f"[DESKTOP] Could not open file: {e}")
         except Exception as e:
             import traceback
-            error_msg = f"Fehler beim Öffnen der CSV:\n{str(e)}\n\n{traceback.format_exc()}"
+            error_msg = f"Fehler beim Öffnen der Datei:\n{str(e)}\n\n{traceback.format_exc()}"
             print(error_msg)
-            # Don't show error popup here - just log it
             self.write_error_log(error_msg)
 
     def export_pdf(self, auto_share=False):
