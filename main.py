@@ -442,6 +442,17 @@ class RootWidget(BoxLayout):
             # Last resort: app internal data directory
             return self.get_db_dir()
 
+    def get_fileprovider_authority(self):
+        """Return FileProvider authority matching the current package name."""
+        try:
+            from jnius import autoclass
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            pkg = PythonActivity.mActivity.getPackageName()
+            return f"{pkg}.fileprovider"
+        except Exception:
+            # Fallback to legacy hardcoded value to avoid crashing
+            return "org.tkideneb.zeiterfassung.fileprovider"
+
     def save_pdf_to_public_documents(self, temp_path, base_filename):
         """Deprecated: MediaStore path handling caused compatibility issues."""
         return temp_path, None
@@ -516,9 +527,9 @@ class RootWidget(BoxLayout):
             
             # Try FileProvider first (Android 7+)
             try:
-                FileProvider = autoclass('androidx.core.content.FileProvider')
-                authority = "org.tkideneb.zeiterfassung.fileprovider"
-                uri = FileProvider.getUriForFile(PythonActivity.mActivity, authority, java_file)
+                    FileProvider = autoclass('androidx.core.content.FileProvider')
+                    authority = self.get_fileprovider_authority()
+                    uri = FileProvider.getUriForFile(PythonActivity.mActivity, authority, java_file)
             except Exception:
                 # Fallback to file:// URI for older devices
                 uri = Uri.fromFile(java_file)
@@ -570,7 +581,7 @@ class RootWidget(BoxLayout):
                 # Try FileProvider first (Android 7+, more secure)
                 try:
                     FileProvider = autoclass('androidx.core.content.FileProvider')
-                    authority = "org.tkideneb.zeiterfassung.fileprovider"
+                    authority = self.get_fileprovider_authority()
                     uri = FileProvider.getUriForFile(context, authority, java_file)
                 except Exception as fp_error:
                     print(f"FileProvider for share failed: {fp_error}")
@@ -1243,7 +1254,7 @@ class RootWidget(BoxLayout):
                 # Try FileProvider first (Android 7+)
                 try:
                     FileProvider = autoclass('androidx.core.content.FileProvider')
-                    authority = "org.tkideneb.zeiterfassung.fileprovider"
+                    authority = self.get_fileprovider_authority()
                     uri = FileProvider.getUriForFile(PythonActivity.mActivity, authority, java_file)
                 except Exception as fp_error:
                     print(f"FileProvider failed: {fp_error}")
