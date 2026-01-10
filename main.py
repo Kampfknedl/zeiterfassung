@@ -38,7 +38,7 @@ KV = '''
             height: '28dp'
             font_size: '14sp'
             bold: True
-            color: 0.2, 0.2, 0.2, 1
+            color: 0.3, 0.3, 0.3, 1
             halign: 'left'
             text_size: self.size
         Spinner:
@@ -49,6 +49,7 @@ KV = '''
             height: '44dp'
             background_normal: ''
             background_color: 0.95, 0.95, 0.95, 1
+            color: 0.2, 0.2, 0.2, 1
             font_size: '15sp'
         BoxLayout:
             size_hint_y: None
@@ -58,14 +59,14 @@ KV = '''
                 text: '+ Kunde'
                 on_release: root.add_customer()
                 background_normal: ''
-                background_color: 0.3, 0.6, 0.9, 1
+                background_color: 0.4, 0.6, 0.8, 1
                 color: 1, 1, 1, 1
                 font_size: '14sp'
             Button:
                 text: 'Kunden verwalten'
                 on_release: root.open_customer_management()
                 background_normal: ''
-                background_color: 0.5, 0.5, 0.5, 1
+                background_color: 0.6, 0.6, 0.6, 1
                 color: 1, 1, 1, 1
                 font_size: '14sp'
 
@@ -145,7 +146,7 @@ KV = '''
                 text: '+ Eintrag'
                 on_release: root.add_entry(activity_input.text, hours_input.text)
                 background_normal: ''
-                background_color: 0.2, 0.7, 0.3, 1
+                background_color: 0.4, 0.7, 0.5, 1
                 color: 1, 1, 1, 1
                 font_size: '15sp'
                 bold: True
@@ -165,12 +166,12 @@ KV = '''
                 size: self.size
                 radius: [10]
         Button:
-            text: 'CSV Export erstellen'
+            text: 'PDF Export erstellen'
             size_hint_y: None
             height: '50dp'
             on_release: root.export_pdf_with_dialog()
             background_normal: ''
-            background_color: 0.9, 0.3, 0.3, 1
+            background_color: 0.7, 0.5, 0.5, 1
             color: 1, 1, 1, 1
             font_size: '16sp'
             bold: True
@@ -183,7 +184,7 @@ KV = '''
                 text: 'Start'
                 on_release: root.start_timer()
                 background_normal: ''
-                background_color: 0.2, 0.7, 0.3, 1
+                background_color: 0.4, 0.7, 0.5, 1
                 color: 1, 1, 1, 1
                 font_size: '14sp'
                 bold: True
@@ -193,7 +194,7 @@ KV = '''
                 disabled: True
                 on_release: root.pause_timer()
                 background_normal: ''
-                background_color: 0.9, 0.6, 0.2, 1
+                background_color: 0.8, 0.7, 0.4, 1
                 color: 1, 1, 1, 1
                 font_size: '14sp'
                 bold: True
@@ -202,7 +203,7 @@ KV = '''
                 text: 'Stop'
                 on_release: root.stop_timer()
                 background_normal: ''
-                background_color: 0.9, 0.3, 0.3, 1
+                background_color: 0.8, 0.5, 0.5, 1
                 color: 1, 1, 1, 1
                 font_size: '14sp'
                 bold: True
@@ -1030,21 +1031,62 @@ class RootWidget(BoxLayout):
                 self._directory_callback(self.get_documents_dir())
 
     def export_pdf_with_dialog(self):
-        """Export PDF with directory selection dialog (shown once, then remembered)"""
-        # Check if we already have a saved path
-        saved_path = self.get_saved_pdf_path()
-        
-        if saved_path and saved_path.startswith('content://'):
-            # Use saved content URI path
-            self.export_pdf_to_path(saved_path)
-        elif saved_path and os.path.exists(saved_path):
-            # Use saved file system path
-            self.export_pdf_to_path(saved_path)
-        else:
-            # Use default documents directory for now
-            # TODO: File picker can be enabled later once app is stable
-            default_path = self.get_documents_dir()
-            self.export_pdf_to_path(default_path)
+        """Export CSV with file save dialog (user can choose OneDrive, etc.)"""
+        try:
+            # Desktop: Use tkinter file dialog
+            import tkinter as tk
+            from tkinter import filedialog
+            
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes('-topmost', True)
+            
+            selected_customer = self.ids.customer_spinner.text
+            default_filename = f"Zeiterfassung_{selected_customer.replace(' ', '_')}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            
+            filepath = filedialog.asksaveasfilename(
+                title="CSV speichern",
+                defaultextension=".csv",
+                filetypes=[("CSV Dateien", "*.csv"), ("Alle Dateien", "*.*")],
+                initialfile=default_filename
+            )
+            
+            root.destroy()
+            
+            if filepath:
+                # Extract directory from full filepath
+                export_dir = os.path.dirname(filepath)
+                filename = os.path.basename(filepath)
+                self.export_csv_to_path(export_dir, filename)
+            else:
+                print("CSV Export abgebrochen")
+                
+        except ImportError:
+            # Android: Use Android file picker (SAF)
+            try:
+                from jnius import autoclass
+                Intent = autoclass('android.content.Intent')
+                PythonActivity = autoclass('org.kivy.android.PythonActivity')
+                
+                selected_customer = self.ids.customer_spinner.text
+                default_filename = f"Zeiterfassung_{selected_customer.replace(' ', '_')}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                
+                intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
+                intent.addCategory(Intent.CATEGORY_OPENABLE)
+                intent.setType("text/csv")
+                intent.putExtra(Intent.EXTRA_TITLE, default_filename)
+                
+                # Store customer for later use in result handler
+                self._export_customer = selected_customer
+                
+                PythonActivity.mActivity.startActivityForResult(intent, 43)
+                
+            except Exception as e:
+                import traceback
+                print(f"Android file dialog error: {str(e)}\n{traceback.format_exc()}")
+                # Fallback to default path
+                default_path = self.get_documents_dir()
+                self.export_csv_to_path(default_path, None)
 
     def write_pdf_to_uri(self, uri_string, pdf_bytes, filename):
         """Write PDF bytes to Android content URI (for OneDrive, etc.)"""
@@ -1093,7 +1135,7 @@ class RootWidget(BoxLayout):
         
         return None
 
-    def export_pdf_to_path(self, export_path):
+    def export_csv_to_path(self, export_path, filename=None):
         """Export customer entries as CSV (simple, reliable format)"""
         selected_customer = self.ids.customer_spinner.text
         if not selected_customer or selected_customer == '—':
@@ -1113,8 +1155,10 @@ class RootWidget(BoxLayout):
             if not os.path.exists(export_path):
                 os.makedirs(export_path, exist_ok=True)
             
-            base_name = f"Zeiterfassung_{selected_customer.replace(' ', '_')}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-            csv_path = os.path.join(export_path, base_name)
+            if filename is None:
+                filename = f"Zeiterfassung_{selected_customer.replace(' ', '_')}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            
+            csv_path = os.path.join(export_path, filename)
 
             # Group entries by month
             months_data = defaultdict(list)
@@ -1167,13 +1211,149 @@ class RootWidget(BoxLayout):
                 writer.writerow([])
                 writer.writerow(['Gesamtstunden', f'{grand_total:.2f}'])
 
-            self.show_success_and_open_pdf(csv_path, selected_customer, is_uri=False)
+            # Automatische PDF-Konvertierung
+            pdf_path = self.convert_csv_to_pdf(csv_path, selected_customer, rows, months_data, sorted_months, grand_total)
+            
+            self.show_success_and_open_pdf(pdf_path if pdf_path else csv_path, selected_customer, is_uri=False)
 
         except Exception as e:
             import traceback
             error_msg = f"Fehler beim Export:\n{str(e)}\n\n{traceback.format_exc()}"
             self.show_error('Export-Fehler', error_msg)
             self.write_error_log(error_msg)
+
+    def convert_csv_to_pdf(self, csv_path, customer_name, rows, months_data, sorted_months, grand_total):
+        """Convert CSV to PDF using reportlab"""
+        try:
+            from reportlab.lib.pagesizes import A4
+            from reportlab.lib.units import cm
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib import colors
+            from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
+            
+            pdf_path = csv_path.replace('.csv', '.pdf')
+            
+            # Create PDF
+            doc = SimpleDocTemplate(pdf_path, pagesize=A4, 
+                                   rightMargin=2*cm, leftMargin=2*cm,
+                                   topMargin=2*cm, bottomMargin=2*cm)
+            
+            story = []
+            styles = getSampleStyleSheet()
+            
+            # Custom styles
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=18,
+                textColor=colors.HexColor('#4a4a4a'),
+                spaceAfter=12,
+                alignment=TA_CENTER
+            )
+            
+            heading_style = ParagraphStyle(
+                'CustomHeading',
+                parent=styles['Heading2'],
+                fontSize=14,
+                textColor=colors.HexColor('#5a5a5a'),
+                spaceAfter=10,
+                spaceBefore=10
+            )
+            
+            # Title
+            story.append(Paragraph(f"Zeiterfassung - {customer_name}", title_style))
+            story.append(Spacer(1, 0.5*cm))
+            
+            # Customer info
+            cust = db.get_customer(self.get_db_path(), customer_name)
+            info_data = [
+                ['Erstellt am:', datetime.datetime.now().strftime("%d.%m.%Y %H:%M")]
+            ]
+            if cust and cust[2]:
+                info_data.append(['Adresse:', cust[2]])
+            if cust and cust[3]:
+                info_data.append(['Email:', cust[3]])
+            if cust and cust[4]:
+                info_data.append(['Telefon:', cust[4]])
+            
+            info_table = Table(info_data, colWidths=[4*cm, 13*cm])
+            info_table.setStyle(TableStyle([
+                ('FONT', (0, 0), (-1, -1), 'Helvetica', 10),
+                ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#5a5a5a')),
+                ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ]))
+            story.append(info_table)
+            story.append(Spacer(1, 0.8*cm))
+            
+            # Monthly entries
+            for month_key in sorted_months:
+                story.append(Paragraph(f"Monat: {month_key}", heading_style))
+                
+                rows_in_month = months_data[month_key]
+                month_total = 0.0
+                
+                table_data = [['Datum', 'Tätigkeit', 'Stunden']]
+                
+                for r in rows_in_month:
+                    date = (r[3] or '')[:10]
+                    act = r[2] or ''
+                    hrs = float(r[5] or 0)
+                    table_data.append([date, act, f'{hrs:.2f}'])
+                    month_total += hrs
+                
+                table_data.append(['', 'Monatssumme:', f'{month_total:.2f}'])
+                
+                t = Table(table_data, colWidths=[3.5*cm, 10*cm, 3.5*cm])
+                t.setStyle(TableStyle([
+                    # Header row
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#7a8a9a')),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('FONT', (0, 0), (-1, 0), 'Helvetica-Bold', 11),
+                    ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+                    ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+                    
+                    # Data rows
+                    ('FONT', (0, 1), (-1, -2), 'Helvetica', 10),
+                    ('ALIGN', (2, 1), (2, -1), 'RIGHT'),
+                    ('GRID', (0, 0), (-1, -2), 0.5, colors.grey),
+                    ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#f5f5f5')]),
+                    
+                    # Total row
+                    ('FONT', (0, -1), (-1, -1), 'Helvetica-Bold', 11),
+                    ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e0e0e0')),
+                    ('TOPPADDING', (0, -1), (-1, -1), 8),
+                    ('BOTTOMPADDING', (0, -1), (-1, -1), 8),
+                ]))
+                
+                story.append(t)
+                story.append(Spacer(1, 0.5*cm))
+            
+            # Grand total
+            grand_total_data = [['Gesamtstunden:', f'{grand_total:.2f}']]
+            grand_table = Table(grand_total_data, colWidths=[13.5*cm, 3.5*cm])
+            grand_table.setStyle(TableStyle([
+                ('FONT', (0, 0), (-1, -1), 'Helvetica-Bold', 14),
+                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#7a8a9a')),
+                ('TEXTCOLOR', (0, 0), (-1, -1), colors.whitesmoke),
+                ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+                ('PADDING', (0, 0), (-1, -1), 12),
+                ('BOX', (0, 0), (-1, -1), 2, colors.HexColor('#5a6a7a')),
+            ]))
+            story.append(Spacer(1, 0.5*cm))
+            story.append(grand_table)
+            
+            # Build PDF
+            doc.build(story)
+            
+            print(f"PDF erfolgreich erstellt: {pdf_path}")
+            return pdf_path
+            
+        except Exception as e:
+            import traceback
+            print(f"PDF Konvertierung fehlgeschlagen: {str(e)}\n{traceback.format_exc()}")
+            return None
 
     def show_success_and_open_pdf(self, filepath, customer_name, is_uri=False):
         """Show success message and automatically open PDF"""
@@ -1186,14 +1366,17 @@ class RootWidget(BoxLayout):
             from kivy.uix.label import Label
             from kivy.uix.button import Button
             
+            # Check if it's PDF or CSV
+            file_type = 'PDF' if filepath.endswith('.pdf') else 'CSV'
+            
             content = BoxLayout(orientation='vertical', spacing=10, padding=15)
             content.add_widget(Label(
-                text='CSV erfolgreich erstellt!',
+                text=f'{file_type} erfolgreich erstellt!',
                 size_hint_y=None,
                 height='50dp',
                 font_size='18sp',
                 bold=True,
-                color=(0.2, 0.7, 0.3, 1)
+                color=(0.4, 0.7, 0.5, 1)
             ))
             content.add_widget(Label(
                 text=f'Kunde: {customer_name}',
@@ -1202,7 +1385,7 @@ class RootWidget(BoxLayout):
                 font_size='14sp'
             ))
             content.add_widget(Label(
-                text='CSV wird jetzt geöffnet...',
+                text=f'{file_type} wird jetzt geöffnet...',
                 size_hint_y=None,
                 height='30dp',
                 font_size='14sp',
@@ -1214,7 +1397,7 @@ class RootWidget(BoxLayout):
                 size_hint_y=None,
                 height='50dp',
                 background_normal='',
-                background_color=(0.3, 0.6, 0.9, 1),
+                background_color=(0.4, 0.6, 0.8, 1),
                 color=(1, 1, 1, 1),
                 font_size='16sp',
                 bold=True
@@ -1222,7 +1405,7 @@ class RootWidget(BoxLayout):
             content.add_widget(btn)
             
             popup = Popup(
-                title='CSV Export',
+                title=f'{file_type} Export',
                 content=content,
                 size_hint=(.85, .5),
                 auto_dismiss=True
