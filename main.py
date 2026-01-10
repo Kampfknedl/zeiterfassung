@@ -13,7 +13,7 @@ KV = '''
     padding: 12
     canvas.before:
         Color:
-            rgba: 0.97, 0.97, 0.97, 1
+            rgba: 0.15, 0.15, 0.15, 1
         Rectangle:
             pos: self.pos
             size: self.size
@@ -26,7 +26,7 @@ KV = '''
         spacing: 6
         canvas.before:
             Color:
-                rgba: 1, 1, 1, 1
+                rgba: 0.25, 0.25, 0.25, 1
             RoundedRectangle:
                 pos: self.pos
                 size: self.size
@@ -38,7 +38,7 @@ KV = '''
             height: '28dp'
             font_size: '14sp'
             bold: True
-            color: 0.3, 0.3, 0.3, 1
+            color: 0.9, 0.9, 0.9, 1
             halign: 'left'
             text_size: self.size
         Spinner:
@@ -48,8 +48,8 @@ KV = '''
             size_hint_y: None
             height: '44dp'
             background_normal: ''
-            background_color: 0.95, 0.95, 0.95, 1
-            color: 0.2, 0.2, 0.2, 1
+            background_color: 0.35, 0.35, 0.35, 1
+            color: 0.9, 0.9, 0.9, 1
             font_size: '15sp'
         BoxLayout:
             size_hint_y: None
@@ -59,14 +59,14 @@ KV = '''
                 text: '+ Kunde'
                 on_release: root.add_customer()
                 background_normal: ''
-                background_color: 0.4, 0.6, 0.8, 1
+                background_color: 0.3, 0.5, 0.7, 1
                 color: 1, 1, 1, 1
                 font_size: '14sp'
             Button:
                 text: 'Kunden verwalten'
                 on_release: root.open_customer_management()
                 background_normal: ''
-                background_color: 0.6, 0.6, 0.6, 1
+                background_color: 0.4, 0.4, 0.4, 1
                 color: 1, 1, 1, 1
                 font_size: '14sp'
 
@@ -79,7 +79,7 @@ KV = '''
         padding: 10
         canvas.before:
             Color:
-                rgba: 1, 1, 1, 1
+                rgba: 0.25, 0.25, 0.25, 1
             RoundedRectangle:
                 pos: self.pos
                 size: self.size
@@ -90,7 +90,7 @@ KV = '''
             height: '28dp'
             font_size: '14sp'
             bold: True
-            color: 0.2, 0.2, 0.2, 1
+            color: 0.9, 0.9, 0.9, 1
             halign: 'left'
             text_size: self.size
         TextInput:
@@ -101,7 +101,8 @@ KV = '''
             font_size: '15sp'
             padding: [12, 10]
             background_normal: ''
-            background_color: 0.95, 0.95, 0.95, 1
+            background_color: 0.35, 0.35, 0.35, 1
+            foreground_color: 0.9, 0.9, 0.9, 1
         BoxLayout:
             size_hint_y: None
             height: '44dp'
@@ -112,7 +113,7 @@ KV = '''
                 width: '70dp'
                 font_size: '14sp'
                 bold: True
-                color: 0.2, 0.2, 0.2, 1
+                color: 0.9, 0.9, 0.9, 1
             TextInput:
                 id: date_input
                 text: ''
@@ -121,7 +122,8 @@ KV = '''
                 font_size: '15sp'
                 padding: [12, 10]
                 background_normal: ''
-                background_color: 0.95, 0.95, 0.95, 1
+                background_color: 0.35, 0.35, 0.35, 1
+                foreground_color: 0.9, 0.9, 0.9, 1
         BoxLayout:
             size_hint_y: None
             height: '44dp'
@@ -132,7 +134,7 @@ KV = '''
                 width: '50dp'
                 font_size: '14sp'
                 bold: True
-                color: 0.2, 0.2, 0.2, 1
+                color: 0.9, 0.9, 0.9, 1
             TextInput:
                 id: hours_input
                 text: '1.0'
@@ -141,12 +143,13 @@ KV = '''
                 font_size: '15sp'
                 padding: [12, 10]
                 background_normal: ''
-                background_color: 0.95, 0.95, 0.95, 1
+                background_color: 0.35, 0.35, 0.35, 1
+                foreground_color: 0.9, 0.9, 0.9, 1
             Button:
                 text: '+ Eintrag'
                 on_release: root.add_entry(activity_input.text, hours_input.text)
                 background_normal: ''
-                background_color: 0.4, 0.7, 0.5, 1
+                background_color: 0.3, 0.6, 0.4, 1
                 color: 1, 1, 1, 1
                 font_size: '15sp'
                 bold: True
@@ -160,7 +163,7 @@ KV = '''
         padding: 10
         canvas.before:
             Color:
-                rgba: 1, 1, 1, 1
+                rgba: 0.25, 0.25, 0.25, 1
             RoundedRectangle:
                 pos: self.pos
                 size: self.size
@@ -171,7 +174,7 @@ KV = '''
             height: '50dp'
             on_release: root.export_pdf_with_dialog()
             background_normal: ''
-            background_color: 0.7, 0.5, 0.5, 1
+            background_color: 0.6, 0.4, 0.4, 1
             color: 1, 1, 1, 1
             font_size: '16sp'
             bold: True
@@ -184,7 +187,7 @@ KV = '''
                 text: 'Start'
                 on_release: root.start_timer()
                 background_normal: ''
-                background_color: 0.4, 0.7, 0.5, 1
+                background_color: 0.3, 0.6, 0.4, 1
                 color: 1, 1, 1, 1
                 font_size: '14sp'
                 bold: True
@@ -194,7 +197,7 @@ KV = '''
                 disabled: True
                 on_release: root.pause_timer()
                 background_normal: ''
-                background_color: 0.8, 0.7, 0.4, 1
+                background_color: 0.7, 0.6, 0.3, 1
                 color: 1, 1, 1, 1
                 font_size: '14sp'
                 bold: True
@@ -203,7 +206,7 @@ KV = '''
                 text: 'Stop'
                 on_release: root.stop_timer()
                 background_normal: ''
-                background_color: 0.8, 0.5, 0.5, 1
+                background_color: 0.7, 0.4, 0.4, 1
                 color: 1, 1, 1, 1
                 font_size: '14sp'
                 bold: True
@@ -214,7 +217,7 @@ KV = '''
         padding: [10, 6, 10, 6]
         canvas.before:
             Color:
-                rgba: 1, 1, 1, 1
+                rgba: 0.25, 0.25, 0.25, 1
             RoundedRectangle:
                 pos: self.pos
                 size: self.size
@@ -225,7 +228,7 @@ KV = '''
             height: '32dp'
             font_size: '14sp'
             bold: True
-            color: 0.2, 0.2, 0.2, 1
+            color: 0.9, 0.9, 0.9, 1
             halign: 'left'
             text_size: self.size
         ScrollView:
@@ -310,16 +313,20 @@ class RootWidget(BoxLayout):
             from kivy.uix.scrollview import ScrollView
             from kivy.uix.label import Label
             from kivy.uix.button import Button
-            root = BoxLayout(orientation='vertical', spacing=8)
+            root = BoxLayout(orientation='vertical', spacing=8, padding=10)
+            root.canvas.before.clear()
+            
             sv = ScrollView(size_hint=(1, 1))
-            lbl = Label(text=message, size_hint_y=None)
+            lbl = Label(text=message, size_hint_y=None, color=(0.9, 0.9, 0.9, 1))
             # enable wrapping
             lbl.bind(width=lambda inst, w: setattr(inst, 'text_size', (w, None)))
             # estimate height based on content length
             lbl.bind(texture_size=lambda inst, ts: setattr(inst, 'height', ts[1] + 20))
             sv.add_widget(lbl)
             root.add_widget(sv)
-            btn = Button(text='OK', size_hint_y=None, height='40dp')
+            btn = Button(text='OK', size_hint_y=None, height='40dp',
+                        background_normal='', background_color=(0.4, 0.6, 0.8, 1),
+                        color=(1, 1, 1, 1), font_size='14sp')
             root.add_widget(btn)
             popup = Popup(title=title, content=root, size_hint=(.9, .7))
             btn.bind(on_release=popup.dismiss)
@@ -329,7 +336,7 @@ class RootWidget(BoxLayout):
             try:
                 from kivy.uix.popup import Popup
                 from kivy.uix.label import Label
-                Popup(title=title, content=Label(text=message[:500]), size_hint=(.9, .6)).open()
+                Popup(title=title, content=Label(text=message[:500], color=(0.9, 0.9, 0.9, 1)), size_hint=(.9, .6)).open()
             except Exception:
                 pass
 
@@ -752,10 +759,26 @@ class RootWidget(BoxLayout):
 
     def add_entry(self, activity, hours):
         customer = self.ids.customer_spinner.text
+        
+        # Validate activity
+        activity = activity.strip()
+        if not activity:
+            self.show_error('Fehler', 'Bitte Tätigkeit eingeben')
+            return
+            
         try:
             hours_f = float(hours)
+            if hours_f <= 0:
+                self.show_error('Fehler', 'Stunden müssen größer als 0 sein')
+                return
         except Exception:
-            hours_f = 1.0
+            self.show_error('Fehler', 'Ungültiges Stundenformat')
+            return
+        
+        if not customer or customer == '—':
+            self.show_error('Fehler', 'Bitte Kunde auswählen')
+            return
+        
         # allow manual date entry in format dd.mm.yyyy for backdating
         date_text = (self.ids.date_input.text or '').strip()
         start = None
@@ -776,7 +799,16 @@ class RootWidget(BoxLayout):
             end = now
 
         path = self.get_db_path()
-        db.add_entry(path, customer, activity or 'Keine Angabe', start, end, hours_f)
+        db.add_entry(path, customer, activity, start, end, hours_f)
+        
+        # Clear inputs after saving
+        self.ids.activity_input.text = ''
+        self.ids.hours_input.text = '1.0'
+        # Reset date to today
+        self.ids.date_input.text = datetime.date.today().strftime('%d.%m.%Y')
+        # Focus back to activity for next entry
+        self.ids.activity_input.focus = True
+        
         self.refresh_entries()
 
     def start_timer(self):
@@ -1490,7 +1522,11 @@ class RootWidget(BoxLayout):
             date = (r[3] or '')[:10]
             hours = f"{r[5]:.2f}"
             text = f"{act} — {date} — {hours} Std"
-            btn = Button(text=text, size_hint_y=None, height='40dp')
+            btn = Button(text=text, size_hint_y=None, height='40dp',
+                        background_normal='',
+                        background_color=(0.35, 0.35, 0.35, 1),
+                        color=(0.8, 0.8, 0.8, 1),
+                        font_size='13sp')
             # bind popup with delete
             btn.bind(on_release=lambda inst, eid=entry_id: self.open_entry_popup(eid))
             box.add_widget(btn)
@@ -1509,26 +1545,33 @@ class RootWidget(BoxLayout):
         from kivy.uix.textinput import TextInput
         from kivy.uix.scrollview import ScrollView
         
-        content = BoxLayout(orientation='vertical', spacing=8)
+        content = BoxLayout(orientation='vertical', spacing=8, padding=10)
+        content.canvas.before.clear()
+        
         act = info[2] or ''
         start = info[3] or ''
         end = info[4] or ''
         hours = f"{info[5]:.2f}"
         notes = info[6] or ''
         
-        content.add_widget(Label(text=f"Tätigkeit: {act}", size_hint_y=None, height='30dp'))
-        content.add_widget(Label(text=f"Start: {start}", size_hint_y=None, height='30dp'))
-        content.add_widget(Label(text=f"Ende: {end}", size_hint_y=None, height='30dp'))
-        content.add_widget(Label(text=f"Std: {hours}", size_hint_y=None, height='30dp'))
+        # Dark mode labels
+        lbl_kwargs = {'size_hint_y': None, 'height': '30dp', 'color': (0.9, 0.9, 0.9, 1)}
+        content.add_widget(Label(text=f"Tätigkeit: {act}", **lbl_kwargs))
+        content.add_widget(Label(text=f"Start: {start}", **lbl_kwargs))
+        content.add_widget(Label(text=f"Ende: {end}", **lbl_kwargs))
+        content.add_widget(Label(text=f"Std: {hours}", **lbl_kwargs))
         
-        content.add_widget(Label(text="Kommentar:", size_hint_y=None, height='25dp'))
-        notes_input = TextInput(text=notes, multiline=True, size_hint_y=0.4)
+        content.add_widget(Label(text="Kommentar:", size_hint_y=None, height='25dp', color=(0.9, 0.9, 0.9, 1)))
+        notes_input = TextInput(text=notes, multiline=True, size_hint_y=0.4,
+                               background_normal='', background_color=(0.35, 0.35, 0.35, 1),
+                               foreground_color=(0.9, 0.9, 0.9, 1))
         content.add_widget(notes_input)
         
         btns = BoxLayout(size_hint_y=None, height='40dp', spacing=4)
-        save_btn = Button(text='Speichern')
-        del_btn = Button(text='Löschen')
-        cancel_btn = Button(text='Abbrechen')
+        btn_kwargs = {'background_normal': '', 'color': (1, 1, 1, 1), 'font_size': '14sp'}
+        save_btn = Button(text='Speichern', background_color=(0.3, 0.6, 0.4, 1), **btn_kwargs)
+        del_btn = Button(text='Löschen', background_color=(0.7, 0.4, 0.4, 1), **btn_kwargs)
+        cancel_btn = Button(text='Abbrechen', background_color=(0.4, 0.4, 0.4, 1), **btn_kwargs)
         btns.add_widget(save_btn)
         btns.add_widget(del_btn)
         btns.add_widget(cancel_btn)
