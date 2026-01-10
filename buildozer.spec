@@ -10,8 +10,9 @@ source.main = main
 version = 2.0
 
 # Python requirements for iOS and Android
-# Minimal requirements - PDF via Android Print Framework
-requirements = python3,kivy,pillow,plyer,pyjnius,reportlab
+# Note: reportlab removed - C extension incompatible with Android NDK
+# App uses CSV export, falls back gracefully if PDF generation unavailable
+requirements = python3,kivy,pillow,plyer,pyjnius
 
 # Android-specific requirements  
 android.permissions = WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,INTERNET
