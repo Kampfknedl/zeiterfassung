@@ -1344,10 +1344,15 @@ class RootWidget(BoxLayout):
                 else:
                     print(f"[EXPORT] ⚠️  PDF path returned but file doesn't exist: {pdf_path}")
                     print(f"[EXPORT] Using CSV instead")
+                    self.show_error('Export-Info', f'PDF konnte nicht erstellt werden.\nCSV-Datei wird stattdessen angezeigt:\n\n{os.path.basename(csv_path)}')
                     self.show_success_and_open_pdf(csv_path, selected_customer, is_uri=False)
             except Exception as pdf_err:
-                print(f"[EXPORT] ⚠️  PDF conversion failed: {pdf_err}")
+                print(f"[EXPORT] ⚠️  PDF conversion exception: {pdf_err}")
+                import traceback
+                print(f"[EXPORT] Traceback: {traceback.format_exc()}")
                 print(f"[EXPORT] Using CSV instead")
+                self.show_error('Export-Info', f'PDF konnte nicht erstellt werden.\nCSV-Datei wird stattdessen angezeigt:\n\n{os.path.basename(csv_path)}')
+                self.show_success_and_open_pdf(csv_path, selected_customer, is_uri=False)
 
         except Exception as e:
             import traceback
@@ -1359,156 +1364,131 @@ class RootWidget(BoxLayout):
         print("[EXPORT] ===== EXPORT COMPLETE =====\n")
 
     def convert_csv_to_pdf(self, csv_path, customer_name, rows, months_data, sorted_months, grand_total):
-        """Convert CSV to PDF using reportlab"""
+        """Convert CSV to PDF using reportlab - SIMPLIFIED VERSION"""
         print(f"\n[PDF] ===== CONVERT_CSV_TO_PDF STARTED =====")
         try:
+            print(f"[PDF] Importing reportlab...")
             from reportlab.lib.pagesizes import A4
             from reportlab.lib.units import cm
             from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
             from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
             from reportlab.lib import colors
-            from reportlab.lib.enums import TA_CENTER
+            from reportlab.lib.enums import TA_CENTER, TA_RIGHT
             
             pdf_path = csv_path.replace('.csv', '.pdf')
             print(f"[PDF] PDF path: {pdf_path}")
-            print(f"[PDF] Months: {len(sorted_months)} months")
-            print(f"[PDF] Rows: {len(rows)} total rows")
-            
-            # Check if CSV file exists
-            if not os.path.exists(csv_path):
-                print(f"[PDF] ❌ CSV file doesn't exist: {csv_path}")
-                raise FileNotFoundError(f"CSV file not found: {csv_path}")
+            print(f"[PDF] Creating PDF with {len(sorted_months)} months, {len(rows)} entries")
             
             # Create PDF directory if needed
             pdf_dir = os.path.dirname(pdf_path)
             if pdf_dir and not os.path.exists(pdf_dir):
+                print(f"[PDF] Creating directory: {pdf_dir}")
                 os.makedirs(pdf_dir, exist_ok=True)
-                print(f"[PDF] Created PDF directory: {pdf_dir}")
             
-            print(f"[PDF] Creating SimpleDocTemplate...")
-            # Create PDF
+            print(f"[PDF] Opening SimpleDocTemplate...")
+            # Create PDF document
             doc = SimpleDocTemplate(pdf_path, pagesize=A4, 
-                                   rightMargin=1.5*cm, leftMargin=1.5*cm,
-                                   topMargin=1.5*cm, bottomMargin=1.5*cm)
+                                   rightMargin=0.8*cm, leftMargin=0.8*cm,
+                                   topMargin=1*cm, bottomMargin=1*cm)
             
             story = []
             styles = getSampleStyleSheet()
             
-            # Title style
+            print(f"[PDF] Creating styles...")
+            # Simple styles
             title_style = ParagraphStyle(
-                'CustomTitle',
-                parent=styles['Heading1'],
-                fontSize=16,
-                textColor=colors.HexColor('#333333'),
-                spaceAfter=10,
-                alignment=TA_CENTER
+                'Title',
+                parent=styles['Normal'],
+                fontSize=14,
+                textColor=colors.black,
+                alignment=TA_CENTER,
+                spaceAfter=10
             )
             
+            print(f"[PDF] Adding title...")
             # Title
-            story.append(Paragraph(f"Zeiterfassung - {customer_name}", title_style))
+            story.append(Paragraph(f"<b>Zeiterfassung - {customer_name}</b>", title_style))
+            story.append(Spacer(1, 0.2*cm))
+            
+            # Created date
+            story.append(Paragraph(f"Erstellt: {datetime.datetime.now().strftime('%d.%m.%Y %H:%M')}", styles['Normal']))
             story.append(Spacer(1, 0.3*cm))
             
-            # Customer info
-            print(f"[PDF] Adding customer info...")
-            cust = db.get_customer(self.get_db_path(), customer_name)
-            info_data = [
-                ['Erstellt:', datetime.datetime.now().strftime("%d.%m.%Y %H:%M")]
-            ]
-            if cust and len(cust) > 2 and cust[2]:
-                info_data.append(['Adresse:', str(cust[2])])
-            if cust and len(cust) > 3 and cust[3]:
-                info_data.append(['Email:', str(cust[3])])
-            if cust and len(cust) > 4 and cust[4]:
-                info_data.append(['Tel:', str(cust[4])])
-            
-            info_table = Table(info_data, colWidths=[3*cm, 14*cm])
-            info_table.setStyle(TableStyle([
-                ('FONT', (0, 0), (-1, -1), 'Helvetica', 9),
-                ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#555555')),
-                ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                ('LEFTPADDING', (0, 0), (-1, -1), 2),
-                ('RIGHTPADDING', (0, 0), (-1, -1), 2),
-            ]))
-            story.append(info_table)
-            story.append(Spacer(1, 0.5*cm))
-            
-            # Monthly entries
-            print(f"[PDF] Adding monthly entries...")
+            # Monthly tables
+            print(f"[PDF] Creating tables for {len(sorted_months)} months...")
             for month_key in sorted_months:
-                print(f"[PDF]   Processing month: {month_key}")
-                story.append(Paragraph(f"<b>Monat: {month_key}</b>", styles['Heading2']))
+                print(f"[PDF]   Month {month_key}...")
+                story.append(Paragraph(f"<b>Monat: {month_key}</b>", styles['Heading3']))
                 
                 rows_in_month = months_data[month_key]
                 month_total = 0.0
                 
+                # Build table data
                 table_data = [['Datum', 'Tätigkeit', 'Stunden']]
-                
                 for r in rows_in_month:
-                    date = str(r[3] or '')[:10]
-                    act = str(r[2] or '')
                     try:
+                        date = str(r[3] or '')[:10]
+                        act = str(r[2] or '')
                         hrs = float(r[5] or 0)
-                    except:
-                        hrs = 0.0
-                    
-                    table_data.append([date, act, f'{hrs:.2f}'])
-                    month_total += hrs
+                        table_data.append([date, act, f'{hrs:.1f}'])
+                        month_total += hrs
+                    except Exception as row_err:
+                        print(f"[PDF]   ERROR in row: {row_err}")
                 
-                table_data.append(['', '<b>Summe</b>', f'<b>{month_total:.2f}</b>'])
+                # Add month total
+                table_data.append(['', '<b>Summe</b>', f'<b>{month_total:.1f}</b>'])
                 
-                table = Table(table_data, colWidths=[3.5*cm, 10*cm, 3.5*cm])
+                # Create and style table
+                table = Table(table_data, colWidths=[2.5*cm, 9*cm, 2.5*cm])
                 table.setStyle(TableStyle([
-                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#cccccc')),
-                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
-                    ('FONT', (0, 0), (-1, 0), 'Helvetica-Bold', 10),
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                     ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
-                    ('FONT', (0, 1), (-1, -1), 'Helvetica', 9),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, 0), 9),
+                    ('BOTTOMPADDING', (0, 0), (-1, 0), 4),
+                    ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+                    ('FONTSIZE', (0, 1), (-1, -1), 8),
                     ('ALIGN', (2, 1), (2, -1), 'RIGHT'),
-                    ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-                    ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#f9f9f9')]),
-                    ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e8e8e8')),
-                    ('FONT', (0, -1), (-1, -1), 'Helvetica-Bold', 9),
                 ]))
                 
                 story.append(table)
-                story.append(Spacer(1, 0.3*cm))
+                story.append(Spacer(1, 0.2*cm))
             
             # Grand total
-            print(f"[PDF] Adding grand total: {grand_total:.2f} hours")
-            story.append(Spacer(1, 0.3*cm))
-            grand_data = [['<b>GESAMTSTUNDEN</b>', f'<b>{grand_total:.2f}</b>']]
-            grand_table = Table(grand_data, colWidths=[14*cm, 3.5*cm])
+            print(f"[PDF] Adding grand total: {grand_total:.1f}...")
+            story.append(Spacer(1, 0.2*cm))
+            grand_table_data = [['<b>GESAMTSTUNDEN:</b>', f'<b>{grand_total:.1f}</b>']]
+            grand_table = Table(grand_table_data, colWidths=[11*cm, 2.5*cm])
             grand_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#7a8a9a')),
-                ('TEXTCOLOR', (0, 0), (-1, -1), colors.white),
-                ('FONT', (0, 0), (-1, -1), 'Helvetica-Bold', 12),
-                ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
-                ('PADDING', (0, 0), (-1, -1), 10),
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('PADDING', (0, 0), (-1, 0), 6),
             ]))
             story.append(grand_table)
             
+            print(f"[PDF] Building PDF document...")
             # Build PDF
-            print(f"[PDF] Building PDF...")
             doc.build(story)
             
-            # Verify file was created
+            # Verify file exists
             if os.path.exists(pdf_path):
                 file_size = os.path.getsize(pdf_path)
-                print(f"[PDF] ✅ PDF created successfully!")
-                print(f"[PDF] Size: {file_size} bytes")
-                print(f"[PDF] ===== CONVERT COMPLETE =====\n")
+                print(f"[PDF] ✅ PDF created! Size: {file_size} bytes")
                 return pdf_path
             else:
-                print(f"[PDF] ❌ PDF file was not created")
+                print(f"[PDF] ❌ PDF file not found after build()")
                 return None
             
         except Exception as e:
             import traceback
-            error_trace = traceback.format_exc()
             print(f"[PDF] ❌ ERROR: {str(e)}")
-            print(f"[PDF] Traceback:\n{error_trace}")
-            print(f"[PDF] ===== CONVERT FAILED =====\n")
+            print(f"[PDF] Type: {type(e).__name__}")
+            print(f"[PDF] Traceback:\n{traceback.format_exc()}")
             return None
 
     def show_success_and_open_pdf(self, filepath, customer_name, is_uri=False):
