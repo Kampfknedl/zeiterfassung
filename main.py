@@ -1372,8 +1372,21 @@ class RootWidget(BoxLayout):
 class PoCApp(App):
     def build(self):
         # Let the Builder create the RootWidget from the KV and return that instance
-        root = Builder.load_string(KV)
-        return root
+        try:
+            root = Builder.load_string(KV)
+            if root is None:
+                print("ERROR: Builder.load_string returned None!")
+                # Fallback: create a simple widget
+                from kivy.uix.label import Label
+                return Label(text='ERROR: KV failed to load')
+            return root
+        except Exception as e:
+            print(f"ERROR in build(): {e}")
+            import traceback
+            traceback.print_exc()
+            # Fallback to minimal widget
+            from kivy.uix.label import Label
+            return Label(text=f'ERROR: {str(e)}')
 
     def on_start(self):
         path = os.path.join(self.user_data_dir, 'stundenerfassung.db')
