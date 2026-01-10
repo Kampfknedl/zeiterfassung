@@ -3,3 +3,4 @@ pillow
 pyjnius
 plyer
 fpdf2
+reportlab

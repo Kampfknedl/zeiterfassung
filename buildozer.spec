@@ -11,7 +11,7 @@ version = 2.0
 
 # Python requirements for iOS and Android
 # Minimal requirements - PDF via Android Print Framework
-requirements = python3,kivy,pillow,plyer,pyjnius
+requirements = python3,kivy,pillow,plyer,pyjnius,reportlab
 
 # Android-specific requirements  
 android.permissions = WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,INTERNET
