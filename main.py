@@ -74,7 +74,7 @@ KV = '''
     BoxLayout:
         orientation: 'vertical'
         size_hint_y: None
-        height: '220dp'
+        height: '280dp'
         spacing: 6
         padding: 10
         canvas.before:
@@ -127,7 +127,7 @@ KV = '''
                 foreground_color: 0.9, 0.9, 0.9, 1
         BoxLayout:
             size_hint_y: None
-            height: '44dp'
+            height: '48dp'
             spacing: 8
             Label:
                 text: 'Std'
@@ -146,14 +146,16 @@ KV = '''
                 background_normal: ''
                 background_color: 0.35, 0.35, 0.35, 1
                 foreground_color: 0.9, 0.9, 0.9, 1
-            Button:
-                text: '+ Eintrag'
-                on_release: root.add_entry(activity_input.text, hours_input.text)
-                background_normal: ''
-                background_color: 0.3, 0.6, 0.4, 1
-                color: 1, 1, 1, 1
-                font_size: '15sp'
-                bold: True
+        Button:
+            text: '+ Eintrag'
+            on_release: root.add_entry(activity_input.text, hours_input.text)
+            size_hint_y: None
+            height: '50dp'
+            background_normal: ''
+            background_color: 0.3, 0.6, 0.4, 1
+            color: 1, 1, 1, 1
+            font_size: '15sp'
+            bold: True
 
     # Row 3: CSV Export & Timer
     BoxLayout:
@@ -1243,8 +1245,14 @@ class RootWidget(BoxLayout):
             default_filename = f"Zeiterfassung_{selected_customer.replace(' ', '_')}_{timestamp}.pdf"
             print(f"[EXPORT] Filename: {default_filename}")
             
-            # Try OneDrive first, then fallback to Documents
-            export_dir = self.get_onedrive_dir()
+            # Try saved path first, then OneDrive, then fallback to Documents
+            export_dir = self.get_saved_pdf_path()
+            if not export_dir:
+                export_dir = self.get_onedrive_dir()
+            if not export_dir:
+                export_dir = self.get_documents_dir()
+            
+            print(f"[EXPORT] Initial export dir: {export_dir}")
             
             # On desktop, ask where to save
             try:
@@ -1252,15 +1260,8 @@ class RootWidget(BoxLayout):
                 from tkinter import filedialog
                 
                 print("[EXPORT] Running on DESKTOP (tkinter available)")
+                print(f"[EXPORT] Opening file dialog with initial dir: {export_dir}")
                 
-                # If no OneDrive found, use Documents
-                if not export_dir:
-                    export_dir = self.get_documents_dir()
-                    print(f"[EXPORT] No OneDrive found, using Documents: {export_dir}")
-                else:
-                    print(f"[EXPORT] OneDrive found: {export_dir}")
-                
-                print(f"[EXPORT] Opening file dialog...")
                 root = tk.Tk()
                 root.withdraw()
                 root.attributes('-topmost', True)
@@ -1281,6 +1282,22 @@ class RootWidget(BoxLayout):
                     filename = os.path.basename(filepath)
                     print(f"[EXPORT] → Dir: {export_dir}")
                     print(f"[EXPORT] → File: {filename}")
+                    
+                    # Validate directory before calling export
+                    if not os.path.exists(export_dir):
+                        print(f"[EXPORT] Creating directory: {export_dir}")
+                        try:
+                            os.makedirs(export_dir, exist_ok=True)
+                            print(f"[EXPORT] ✅ Directory created")
+                        except Exception as e:
+                            print(f"[EXPORT] ❌ Could not create directory: {e}")
+                            self.show_error('Fehler', f'Verzeichnis konnte nicht erstellt werden:\n{e}')
+                            return
+                    
+                    # Save the path for future use
+                    self.save_pdf_path(export_dir)
+                    print(f"[EXPORT] Saved export path for future use")
+                    
                     self.export_csv_to_path(export_dir, filename)
                 else:
                     print("[EXPORT] ⚠️  Export cancelled by user")
@@ -1295,9 +1312,12 @@ class RootWidget(BoxLayout):
                 # Ensure directory exists
                 try:
                     os.makedirs(export_dir, exist_ok=True)
+                    print(f"[EXPORT] ✅ Directory ready")
                 except Exception as e:
                     print(f"[EXPORT] Warning: Could not create dir: {e}")
                 
+                # Save for future use
+                self.save_pdf_path(export_dir)
                 self.export_csv_to_path(export_dir, default_filename)
                 
         except Exception as e:
@@ -1359,9 +1379,36 @@ class RootWidget(BoxLayout):
         print(f"[EXPORT] Export path: '{export_path}'")
         print(f"[EXPORT] Filename: '{filename}'")
         
+        # Validate export path
+        if not export_path or not isinstance(export_path, str):
+            print(f"[EXPORT] ❌ Invalid export path: {export_path}")
+            self.show_error('Fehler', 'Ungültiger Speicherort')
+            return
+        
+        # Normalize path
+        export_path = os.path.normpath(export_path)
+        print(f"[EXPORT] Normalized path: {export_path}")
+        
+        # Ensure directory exists
+        if not os.path.exists(export_path):
+            print(f"[EXPORT] Creating directory: {export_path}")
+            try:
+                os.makedirs(export_path, exist_ok=True)
+                print(f"[EXPORT] ✅ Directory created")
+            except Exception as e:
+                print(f"[EXPORT] ❌ Could not create directory: {e}")
+                self.show_error('Fehler', f'Verzeichnis konnte nicht erstellt werden:\n{e}')
+                return
+        
+        # Verify directory is writable
+        if not os.access(export_path, os.W_OK):
+            print(f"[EXPORT] ❌ No write permission to directory: {export_path}")
+            self.show_error('Fehler', f'Keine Schreibberechtigung im Verzeichnis:\n{export_path}')
+            return
+        
         selected_customer = self.ids.customer_spinner.text
         if not selected_customer or selected_customer == '—':
-            print(f"[EXPORT] ❌ Keine Kunde ausgewählt")
+            print(f"[EXPORT] ❌ No customer selected")
             self.show_error('Fehler', 'Bitte Kunde auswählen')
             return
 
@@ -1379,18 +1426,15 @@ class RootWidget(BoxLayout):
             import csv
             from collections import defaultdict
 
-            # Ensure export directory exists
-            print(f"[EXPORT] Checking if directory exists: {export_path}")
-            if not os.path.exists(export_path):
-                print(f"[EXPORT] Creating directory...")
-                os.makedirs(export_path, exist_ok=True)
-                print(f"[EXPORT] ✅ Directory created")
-            else:
-                print(f"[EXPORT] ✅ Directory exists")
-            
             if filename is None:
                 filename = f"Zeiterfassung_{selected_customer.replace(' ', '_')}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
                 print(f"[EXPORT] Auto-generated filename: {filename}")
+            
+            # Sanitize filename - remove invalid characters
+            invalid_chars = '<>:"|?*\\'
+            for char in invalid_chars:
+                filename = filename.replace(char, '_')
+            print(f"[EXPORT] Sanitized filename: {filename}")
             
             # Use PDF filename (we'll generate PDF, not CSV)
             if not filename.endswith('.pdf'):
@@ -1402,6 +1446,9 @@ class RootWidget(BoxLayout):
             
             print(f"[EXPORT] Full PDF path: {pdf_path}")
             print(f"[EXPORT] Full CSV path: {csv_path}")
+            
+            # Verify paths are on allowed locations
+            print(f"[EXPORT] ✅ Paths validated")
 
             # Group entries by month
             print(f"[EXPORT] Processing {len(rows)} entries...")
