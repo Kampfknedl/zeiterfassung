@@ -48,6 +48,11 @@ class MainScreen(MDScreen):
         self._pause_start = None
         self._clock_event = None
         self.dialog = None
+        # Default Export-Verzeichnis (kann vom Nutzer überschrieben werden)
+        try:
+            self.export_dir = self.get_documents_dir()
+        except Exception:
+            self.export_dir = os.path.dirname(self.get_db_path())
         
     def on_kv_post(self, base_widget):
         """Initialize after KV is loaded"""
@@ -84,6 +89,24 @@ class MainScreen(MDScreen):
             return docs_path
         except Exception:
             return os.path.dirname(self.get_db_path())
+
+    def choose_export_dir(self):
+        """Let user choose an export directory (Desktop/Android, iOS optional)."""
+        try:
+            from plyer import filechooser
+            # choose_dir returns a list of selected directories
+            selection = filechooser.choose_dir()
+            if selection and isinstance(selection, (list, tuple)):
+                chosen = selection[0]
+                if chosen:
+                    os.makedirs(chosen, exist_ok=True)
+                    self.export_dir = chosen
+                    self.show_snackbar(f"Speicherort gesetzt: {chosen}")
+                    return True
+        except Exception as e:
+            print(f"choose_export_dir error: {e}")
+        self.show_snackbar("Kein Speicherort gewählt")
+        return False
     
     def show_snackbar(self, text):
         """Show a snackbar message"""
@@ -447,7 +470,7 @@ class MainScreen(MDScreen):
         )
         self.dialog.open()
     
-    def export_pdf(self, auto_share=False):
+    def export_pdf(self, auto_share=False, target_dir=None):
         """Export to PDF with automatic open and share"""
         customer = self.selected_customer
         if customer == '—':
@@ -467,7 +490,12 @@ class MainScreen(MDScreen):
             from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
             from collections import defaultdict
             
-            out_dir = self.get_documents_dir()
+            # Zielordner: vom Nutzer gewählt > übergeben > Standard
+            out_dir = (self.export_dir if hasattr(self, 'export_dir') and self.export_dir else None)
+            if target_dir:
+                out_dir = target_dir
+            if not out_dir:
+                out_dir = self.get_documents_dir()
             base_name = f"report_{customer.replace(' ', '_')}.pdf"
             file_path = os.path.join(out_dir, base_name)
             
@@ -606,6 +634,129 @@ class MainScreen(MDScreen):
             error_msg = f"PDF Export Fehler: {str(e)}\n{traceback.format_exc()}"
             print(error_msg)
             self.show_snackbar(f"PDF Fehler: {str(e)}")
+
+    def export_pdf_choose_location(self, auto_share=False):
+        """Android: System-Dialog zum Speichern verwenden (SAF). Desktop: Standardpfad.
+        Workaround für freie Ordnerwahl auf dem Handy.
+        """
+        customer = self.selected_customer
+        if customer == '—':
+            self.show_snackbar("Bitte Kunde auswählen")
+            return
+
+        # Generiere PDF zunächst temporär im App-Verzeichnis
+        suggested_name = f"report_{customer.replace(' ', '_')}.pdf"
+        tmp_dir = self.get_documents_dir()
+        tmp_path = os.path.join(tmp_dir, suggested_name)
+
+        # Erzeuge PDF über bestehende Routine (ohne Öffnen/Teilen)
+        try:
+            from reportlab.lib.pagesizes import A4
+            from reportlab.lib import colors
+            from reportlab.lib.units import cm
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from collections import defaultdict
+
+            rows = db.get_entries(self.get_db_path(), customer)
+            if not rows:
+                self.show_snackbar("Keine Einträge vorhanden")
+                return
+
+            doc = SimpleDocTemplate(tmp_path, pagesize=A4)
+            elements = []
+            styles = getSampleStyleSheet()
+
+            title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=24, textColor=colors.HexColor('#1976D2'), spaceAfter=30)
+            elements.append(Paragraph(f"Zeiterfassung - {customer}", title_style))
+            elements.append(Spacer(1, 0.5*cm))
+
+            cust = db.get_customer(self.get_db_path(), customer)
+            info_data = [[Paragraph('<b>Kunde:</b>', styles['Normal']), customer],
+                         [Paragraph('<b>Datum:</b>', styles['Normal']), datetime.datetime.now().strftime('%d.%m.%Y')]]
+            if cust:
+                if cust[2]: info_data.append([Paragraph('<b>Adresse:</b>', styles['Normal']), cust[2]])
+                if cust[3]: info_data.append([Paragraph('<b>Email:</b>', styles['Normal']), cust[3]])
+                if cust[4]: info_data.append([Paragraph('<b>Telefon:</b>', styles['Normal']), cust[4]])
+            info_table = Table(info_data, colWidths=[4*cm, 12*cm])
+            info_table.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP'), ('TOPPADDING', (0,0), (-1,-1), 6), ('BOTTOMPADDING', (0,0), (-1,-1), 6)]))
+            elements.append(info_table)
+            elements.append(Spacer(1, 1*cm))
+
+            months = defaultdict(list)
+            for r in rows:
+                date_str = (r[3] or '')[:10]
+                key = date_str[:7] if date_str else 'Undatiert'
+                months[key].append(r)
+            grand_total = 0.0
+            for key in sorted(months.keys(), reverse=True):
+                month_style = ParagraphStyle('MonthHeader', parent=styles['Heading2'], fontSize=16, textColor=colors.HexColor('#1976D2'), spaceAfter=10)
+                elements.append(Paragraph(f"Monat: {key}", month_style))
+                data = [['Datum', 'Tätigkeit', 'Stunden']]
+                total = 0.0
+                for r in months[key]:
+                    date = (r[3] or '')[:10]
+                    act = r[2] or ''
+                    hrs = float(r[5] or 0)
+                    data.append([date, act, f"{hrs:.2f}"])
+                    total += hrs
+                data.append(['', Paragraph('<b>Monatssumme</b>', styles['Normal']), Paragraph(f'<b>{total:.2f}</b>', styles['Normal'])])
+                t = Table(data, colWidths=[3*cm, 10*cm, 3*cm])
+                t.setStyle(TableStyle([
+                    ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1976D2')),
+                    ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+                    ('ALIGN', (2,0), (2,-1), 'RIGHT'),
+                    ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0,0), (-1,0), 12),
+                    ('BACKGROUND', (0,1), (-1,-2), colors.beige),
+                    ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#E3F2FD')),
+                    ('GRID', (0,0), (-1,-1), 1, colors.grey)
+                ]))
+                elements.append(t)
+                elements.append(Spacer(1, 0.5*cm))
+                grand_total += total
+
+            total_data = [[Paragraph('<b>Gesamtstunden:</b>', styles['Heading3']), Paragraph(f'<b>{grand_total:.2f} Std</b>', styles['Heading3'])]]
+            total_table = Table(total_data, colWidths=[10*cm, 6*cm])
+            total_table.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#1976D2')),
+                ('TEXTCOLOR', (0,0), (-1,-1), colors.whitesmoke),
+                ('TOPPADDING', (0,0), (-1,-1), 12),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 12),
+            ]))
+            elements.append(Spacer(1, 1*cm))
+            elements.append(total_table)
+
+            doc.build(elements)
+
+            # Android: Speichern via SAF (System-Dialog)
+            if IS_ANDROID:
+                try:
+                    from androidstorage4kivy import SharedStorage
+                    ss = SharedStorage()
+                    ok = ss.save_file(tmp_path, suggested_name, 'application/pdf')
+                    if ok:
+                        self.show_snackbar("PDF gespeichert (Benutzerordner)")
+                        if auto_share:
+                            self.share_file(tmp_path, 'application/pdf')
+                        return
+                    else:
+                        self.show_snackbar("Speichern abgebrochen")
+                        return
+                except Exception as e:
+                    print(f"SAF save error: {e}")
+                    # Fallback: belasse Datei im tmp_path
+                    self.show_snackbar(f"Gespeichert in: {tmp_path}")
+
+            # Desktop/iOS: Standard öffnen
+            self.open_file(tmp_path, mime_type='application/pdf')
+            if auto_share:
+                Clock.schedule_once(lambda dt: self.share_file(tmp_path, 'application/pdf'), 0.5)
+
+        except Exception as e:
+            import traceback
+            print(f"PDF Choose Location Fehler: {e}\n{traceback.format_exc()}")
+            self.show_snackbar(f"PDF Fehler: {str(e)}")
     
     def export_csv(self, auto_share=False):
         """Export to CSV"""
@@ -692,7 +843,8 @@ class MainScreen(MDScreen):
                 
                 try:
                     FileProvider = autoclass('androidx.core.content.FileProvider')
-                    authority = "org.tkideneb.zeiterfassung.fileprovider"
+                    # Authority muss mit package.domain + package.name übereinstimmen
+                    authority = "org.tkideneb2.zeiterfassung.fileprovider"
                     uri = FileProvider.getUriForFile(context, authority, java_file)
                 except:
                     uri = Uri.fromFile(java_file)
@@ -739,13 +891,14 @@ class MainScreen(MDScreen):
                     
                     try:
                         FileProvider = autoclass('androidx.core.content.FileProvider')
-                        authority = "org.tkideneb.zeiterfassung.fileprovider"
+                        authority = "org.tkideneb2.zeiterfassung.fileprovider"
                         uri = FileProvider.getUriForFile(context, authority, java_file)
                     except:
                         uri = Uri.fromFile(java_file)
                     
                     intent = Intent(Intent.ACTION_SEND)
-                    intent.setType('text/csv')
+                    # Setze korrekten MIME Type (z.B. application/pdf)
+                    intent.setType(mime_type or 'application/octet-stream')
                     intent.putExtra(Intent.EXTRA_STREAM, uri)
                     intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     

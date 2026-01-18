@@ -5,14 +5,12 @@ package.domain = org.tkideneb2
 
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,db
-source.main = main
+source.main = main_new.py
 
 version = 2.0
 
 # Python requirements for iOS and Android
-# Note: reportlab removed - C extension incompatible with Android NDK
-# App uses CSV export, falls back gracefully if PDF generation unavailable
-requirements = python3,kivy,pillow,plyer,pyjnius
+requirements = python3,kivy,kivymd,pillow,plyer,pyjnius,reportlab,cython,androidstorage4kivy
 
 # Android-specific requirements  
 android.permissions = WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,INTERNET
@@ -23,7 +21,7 @@ android.accept_sdk_license = True
 android.ndk = 25b
 android.skip_update = False
 
-# Android FileProvider and content provider configuration for sharing and file access
+# Android FileProvider configuration for sharing PDFs/CSVs
 android.add_resources = res
 android.gradle_dependencies = androidx.core:core:1.9.0,androidx.documentfile:documentfile:1.0.1
 

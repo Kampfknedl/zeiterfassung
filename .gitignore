@@ -37,6 +37,13 @@ env/
 .buildozer/
 bin/
 
+# Local Android SDK/JDK (do not commit)
+android-sdk/
+java17/
+
+# Archives
+*.zip
+
 # Logs
 *.log
 buildozer-output.log

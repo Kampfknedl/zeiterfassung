@@ -1,6 +1,9 @@
 kivy
+kivymd
 pillow
 pyjnius
 plyer
 fpdf2
 reportlab
+cython
+androidstorage4kivy
