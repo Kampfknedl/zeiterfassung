@@ -10,9 +10,9 @@ source.main = main_new.py
 version = 2.0
 
 # Python requirements for iOS and Android
-# IMPORTANT: Python 3.10 required for reportlab compatibility on Android
-# Python 3.11+ breaks reportlab native C module (_rl_accel.c) on Android NDK
-requirements = python3==3.10,kivy,kivymd,pillow,plyer,pyjnius,reportlab,cython,androidstorage4kivy
+# IMPORTANT: Exact patch version required (python-for-android needs full version number)
+# Python 3.10.13 is the last stable 3.10 release, fully compatible with reportlab on Android
+requirements = python3==3.10.13,kivy,kivymd,pillow,plyer,pyjnius,reportlab,cython,androidstorage4kivy
 
 # Android-specific requirements  
 android.permissions = WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,INTERNET
