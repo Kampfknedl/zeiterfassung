@@ -10,7 +10,8 @@ param(
     [ValidateSet("debug", "release")]
     [string]$BuildType = "debug",
     
-    [switch]$SkipDockerPull,
+    # Wir nutzen ein lokales Image, daher Pull standardmäßig überspringen
+    [switch]$SkipDockerPull = $true,
     [switch]$KeepContainerLogs,
     [switch]$AutoInstall,
     [switch]$OpenFinder
@@ -19,7 +20,7 @@ param(
 # ============================================================================
 # KONFIGURATION
 # ============================================================================
-$DOCKER_IMAGE = "kivy/buildozer"
+$DOCKER_IMAGE = "zeiterfassung-buildozer"
 $DOCKER_TAG = "latest"
 $PROJECT_NAME = "Zeiterfassung"
 $APK_NAME_PATTERN = "zeiterfassung-*.apk"
@@ -65,17 +66,8 @@ function Test-Docker {
 }
 
 function Pull-DockerImage {
-    Write-Log "Pullen des Docker-Images ($DOCKER_IMAGE)..." "Info"
-    
-    docker pull "$DOCKER_IMAGE:$DOCKER_TAG" 2>&1
-    
-    if ($LASTEXITCODE -eq 0) {
-        Write-Log "Docker-Image erfolgreich gepullt" "Success"
-        return $true
-    } else {
-        Write-Log "Fehler beim Pullen des Docker-Images" "Error"
-        return $false
-    }
+    Write-Log "Lokales Docker-Image wird vorausgesetzt (SkipDockerPull aktiv)." "Info"
+    return $true
 }
 
 function Build-APK {
@@ -87,13 +79,13 @@ function Build-APK {
     
     $buildCommand = "buildozer -v android $BuildType"
     
-    Write-Log "Docker-Befehl: docker run --rm -v '$ProjectPath`:/home/user/buildozer' -w /home/user/buildozer $DOCKER_IMAGE $buildCommand" "Info"
+    Write-Log "Docker-Befehl: docker run --rm -v '$ProjectPath`:/app' -w /app $DOCKER_IMAGE $buildCommand" "Info"
     Write-Log ""
     Write-Log "Dies kann 5-15 Minuten dauern..." "Warning"
     Write-Log ""
     
     # Build ausführen
-    docker run --rm -v "$ProjectPath`:/home/user/buildozer" -w /home/user/buildozer $DOCKER_IMAGE $buildCommand 2>&1 | Tee-Object -Variable buildLog
+    docker run --rm -v "$ProjectPath`:/app" -w /app $DOCKER_IMAGE $buildCommand 2>&1 | Tee-Object -Variable buildLog
     
     $buildSuccess = $LASTEXITCODE -eq 0
     return @{
