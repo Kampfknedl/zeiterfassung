@@ -5,7 +5,10 @@ package.domain = org.tkideneb2
 
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,db
-source.main = main_new.py
+source.exclude_dirs = android-sdk,java17,.git,__pycache__,.buildozer,bin,templates
+source.exclude_patterns = *.md,*.txt,*.bat,*.ps1,*.sh,*.spec,*.kv,Dockerfile,*.zip
+# Nutze das stabile Kivy-Layout als Einstiegspunkt
+source.main = main.py
 
 version = 2.0
 
@@ -22,6 +25,9 @@ android.archs = arm64-v8a,armeabi-v7a
 android.accept_sdk_license = True
 android.ndk = 25b
 android.skip_update = False
+# Use preinstalled SDK/NDK inside Docker image
+android.sdk_path = /opt/android-sdk
+android.ndk_path = /opt/android-ndk
 
 # Android FileProvider configuration for sharing PDFs/CSVs
 android.add_resources = res
