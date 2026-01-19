@@ -161,7 +161,7 @@ KV = '''
     BoxLayout:
         orientation: 'vertical'
         size_hint_y: None
-        height: '130dp'
+        height: '230dp'
         spacing: 6
         padding: 10
         canvas.before:
