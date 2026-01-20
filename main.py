@@ -4,7 +4,53 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.properties import ListProperty, StringProperty
 import os
 import datetime
+import sys
+import traceback
 import db
+
+
+def _install_crash_logger():
+    """Capture uncaught exceptions to a crash.txt for easier Android debugging."""
+    def _hook(exc_type, exc, tb):
+        timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        lines = [
+            f"[{timestamp}] Uncaught exception",
+            ''.join(traceback.format_exception(exc_type, exc, tb)),
+            '\n'
+        ]
+        candidates = [
+            '/sdcard/Documents/Zeiterfassung/crash.txt',
+            os.path.join(os.path.expanduser('~'), 'Documents', 'Zeiterfassung', 'crash.txt'),
+        ]
+        try:
+            # Fallback to app data dir if app is available
+            app_dir = App.get_running_app().user_data_dir
+            candidates.append(os.path.join(app_dir, 'crash.txt'))
+        except Exception:
+            pass
+
+        for path in candidates:
+            try:
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, 'a', encoding='utf-8') as f:
+                    f.writelines(lines)
+                break
+            except Exception:
+                continue
+
+        # Also print to stderr so logcat picks it up
+        try:
+            sys.__stderr__.write(lines[1])
+        except Exception:
+            pass
+
+        # Call default handler
+        sys.__excepthook__(exc_type, exc, tb)
+
+    sys.excepthook = _hook
+
+
+_install_crash_logger()
 
 KV = '''
 <RootWidget>:
