@@ -15,7 +15,11 @@ import db
 
 
 def _install_crash_logger():
-    """Capture uncaught exceptions to a crash.txt for easier Android debugging."""
+    """Capture uncaught exceptions to a crash.txt for easier Android debugging.
+    
+    IMPORTANT: This is called from App.on_start(), NOT at module import!
+    Prevents crash logger from running before Android permissions/context ready.
+    """
     def _hook(exc_type, exc, tb):
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         lines = [
@@ -53,9 +57,6 @@ def _install_crash_logger():
         sys.__excepthook__(exc_type, exc, tb)
 
     sys.excepthook = _hook
-
-
-_install_crash_logger()
 
 KV = '''
 <RootWidget>:
@@ -2244,14 +2245,20 @@ class PoCApp(App):
             raise
 
     def on_start(self):
-        """Called after widget tree is built. Initialize DB here."""
+        """Called after widget tree is built. Initialize critical services here."""
         try:
             print("[APP] on_start() called")
+            
+            # Install crash logger now that App context exists
+            _install_crash_logger()
+            print("[APP] Crash logger installed")
+            
+            # Initialize DB
             path = os.path.join(self.user_data_dir, 'stundenerfassung.db')
             db.init_db(path)
             print(f"[APP] DB initialized at: {path}")
         except Exception as e:
-            print(f"[APP] DB init error in on_start: {e}")
+            print(f"[APP] on_start() error: {e}")
             traceback.print_exc()
 
 
