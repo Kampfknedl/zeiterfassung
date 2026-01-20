@@ -6,7 +6,7 @@ package.domain = org.tkideneb2
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,db
 source.exclude_dirs = android-sdk,java17,.git,__pycache__,.buildozer,bin,templates
-source.exclude_patterns = *.md,*.txt,*.bat,*.ps1,*.sh,*.spec,*.kv,Dockerfile,*.zip
+source.exclude_patterns = *.md,*.txt,*.bat,*.ps1,*.sh,*.spec,Dockerfile,*.zip
 # Nutze das stabile Kivy-Layout als Einstiegspunkt
 source.main = main.py
 
