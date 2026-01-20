@@ -2219,17 +2219,11 @@ class RootWidget(BoxLayout):
 
 class PoCApp(App):
     def build(self):
-        # Load the KV - the RootWidget class is defined above
-        root = Builder.load_string(KV)
+        # Load the KV rules - this applies the <RootWidget>: rule
+        Builder.load_string(KV)
         
-        # If Builder returns None, it means the KV didn't define a root widget properly
-        # This should not happen with our <RootWidget>: rule, but just in case...
-        if root is None:
-            print("[ERROR] Builder.load_string returned None!")
-            print("[ERROR] KV rule '<RootWidget>:' may not have instantiated properly")
-            # Return the RootWidget directly
-            root = RootWidget()
-        
+        # Now create and return the actual RootWidget instance
+        root = RootWidget()
         return root
 
     def on_start(self):
