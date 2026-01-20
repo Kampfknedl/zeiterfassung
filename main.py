@@ -280,6 +280,8 @@ class RootWidget(BoxLayout):
         self._timer_start = None
         self._timer_paused_time = 0  # accumulated paused seconds
         self._pause_start = None      # when pause was pressed
+        self._timer_popup = None      # active timer notification
+        self._timer_event = None      # scheduled timer update event
         self._pdf_export_path = None  # User-selected PDF export directory
         self._last_export_path = None
         self._last_export_is_uri = False
@@ -871,9 +873,19 @@ class RootWidget(BoxLayout):
             from kivy.uix.label import Label
             Popup(title='Fehler', content=Label(text='Bitte Kunde auswählen'), size_hint=(.6, .3)).open()
             return
+        
+        # Validate activity is entered
+        activity = self.ids.activity_input.text.strip()
+        if not activity:
+            from kivy.uix.popup import Popup
+            from kivy.uix.label import Label
+            Popup(title='Fehler', content=Label(text='Bitte Tätigkeit eingeben'), size_hint=(.6, .3)).open()
+            return
+        
         if self._timer_start is not None:
             # already running
             return
+        
         self._timer_start = datetime.datetime.now()
         self._timer_paused_time = 0
         self._pause_start = None
@@ -884,6 +896,152 @@ class RootWidget(BoxLayout):
             self.ids.stop_btn.disabled = False
         except Exception:
             pass
+        
+        # Show timer notification with live updates
+        self._show_timer_notification()
+
+    
+    def _format_elapsed_time(self):
+        """Calculate and format elapsed time (excluding pauses)"""
+        if self._timer_start is None:
+            return "00:00:00"
+        
+        now = datetime.datetime.now()
+        total_seconds = (now - self._timer_start).total_seconds()
+        
+        # Subtract pause time
+        if self._pause_start is not None:
+            total_seconds -= (now - self._pause_start).total_seconds()
+        total_seconds -= self._timer_paused_time
+        
+        hours = int(total_seconds // 3600)
+        minutes = int((total_seconds % 3600) // 60)
+        seconds = int(total_seconds % 60)
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+    
+    def _show_timer_notification(self):
+        """Show popup with live timer, pause, and stop buttons"""
+        from kivy.uix.popup import Popup
+        from kivy.uix.boxlayout import BoxLayout
+        from kivy.uix.label import Label
+        from kivy.uix.button import Button
+        from kivy.clock import Clock
+        
+        # Close any existing timer popup
+        if self._timer_popup is not None:
+            try:
+                self._timer_popup.dismiss()
+            except Exception:
+                pass
+        
+        # Cancel any existing scheduled update
+        if self._timer_event is not None:
+            self._timer_event.cancel()
+            self._timer_event = None
+        
+        # Create content layout
+        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        
+        # Customer and activity labels
+        activity = self.ids.activity_input.text.strip() or 'Keine Angabe'
+        customer = self.ids.customer_spinner.text
+        
+        content.add_widget(Label(
+            text=f'Kunde: {customer}',
+            size_hint_y=None,
+            height='30dp',
+            font_size='14sp'
+        ))
+        
+        content.add_widget(Label(
+            text=f'Tätigkeit: {activity}',
+            size_hint_y=None,
+            height='30dp',
+            font_size='13sp'
+        ))
+        
+        # Time display label
+        time_label = Label(
+            text=self._format_elapsed_time(),
+            size_hint_y=None,
+            height='60dp',
+            font_size='48sp',
+            bold=True,
+            color=(0.2, 0.8, 0.2, 1)  # Green
+        )
+        content.add_widget(time_label)
+        
+        # Button layout
+        button_layout = BoxLayout(size_hint_y=None, height='50dp', spacing=8)
+        
+        pause_btn = Button(text='Pause' if self._pause_start is None else 'Fortsetzen')
+        stop_btn = Button(text='Beenden')
+        close_btn = Button(text='Schließen')
+        
+        button_layout.add_widget(pause_btn)
+        button_layout.add_widget(stop_btn)
+        button_layout.add_widget(close_btn)
+        content.add_widget(button_layout)
+        
+        # Create popup
+        self._timer_popup = Popup(
+            title='⏱️  Arbeitszeit läuft',
+            content=content,
+            size_hint=(0.85, 0.5),
+            auto_dismiss=False
+        )
+        
+        def update_timer(*args):
+            """Update timer display every second"""
+            if self._timer_start is None:
+                # Timer stopped, close popup
+                if self._timer_popup is not None:
+                    try:
+                        self._timer_popup.dismiss()
+                    except Exception:
+                        pass
+                return
+            
+            # Update time label
+            time_label.text = self._format_elapsed_time()
+            
+            # Update pause button text
+            new_text = 'Pause' if self._pause_start is None else 'Fortsetzen'
+            if pause_btn.text != new_text:
+                pause_btn.text = new_text
+        
+        def on_pause(*args):
+            """Handle pause button click"""
+            self.pause_timer()
+            update_timer()
+        
+        def on_stop(*args):
+            """Handle stop button click"""
+            self.stop_timer()
+            # Popup will close automatically when timer stops
+        
+        def on_close(*args):
+            """Close popup but keep timer running"""
+            if self._timer_popup is not None:
+                try:
+                    self._timer_popup.dismiss()
+                except Exception:
+                    pass
+                self._timer_popup = None
+            # Cancel update event
+            if self._timer_event is not None:
+                self._timer_event.cancel()
+                self._timer_event = None
+        
+        pause_btn.bind(on_release=on_pause)
+        stop_btn.bind(on_release=on_stop)
+        close_btn.bind(on_release=on_close)
+        
+        # Schedule timer updates every second
+        self._timer_event = Clock.schedule_interval(update_timer, 1.0)
+        
+        # Show popup
+        self._timer_popup.open()
 
     def pause_timer(self):
         if self._timer_start is None:
@@ -908,6 +1066,20 @@ class RootWidget(BoxLayout):
     def stop_timer(self):
         if self._timer_start is None:
             return
+        
+        # Close notification popup
+        if self._timer_popup is not None:
+            try:
+                self._timer_popup.dismiss()
+            except Exception:
+                pass
+            self._timer_popup = None
+        
+        # Cancel timer update event
+        if self._timer_event is not None:
+            self._timer_event.cancel()
+            self._timer_event = None
+        
         end = datetime.datetime.now()
         
         # Calculate active time (excluding pauses)
