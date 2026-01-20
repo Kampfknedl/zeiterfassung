@@ -2,6 +2,11 @@ from kivy.app import App
 from kivy.lang import Builder
 from kivy.uix.boxlayout import BoxLayout
 from kivy.properties import ListProperty, StringProperty
+from kivy.uix.popup import Popup
+from kivy.uix.label import Label
+from kivy.uix.button import Button
+from kivy.uix.textinput import TextInput
+from kivy.clock import Clock
 import os
 import datetime
 import sys
@@ -333,50 +338,55 @@ class RootWidget(BoxLayout):
         self._last_export_is_uri = False
 
     def on_kv_post(self, base_widget):
-        # Ensure DB initialized before attempting queries
-        try:
-            db.init_db(self.get_db_path())
-        except Exception as e:
-            print(f"DB init error: {e}")
+        """Called when KV layout for this widget is complete."""
+        print("[KV_POST] on_kv_post() called")
+        
+        # NOTE: DB init already done in App.on_start(), don't repeat here
+        # Just load UI state and set up bindings
         
         try:
             self.load_customers()
+            print("[KV_POST] Customers loaded")
         except Exception as e:
-            print(f"Load customers error: {e}")
+            print(f"[KV_POST] Load customers error: {e}")
             self.customers = ['—']  # Fallback
         
         try:
             self.refresh_entries()
+            print("[KV_POST] Entries refreshed")
         except Exception as e:
-            print(f"Refresh entries error: {e}")
+            print(f"[KV_POST] Refresh entries error: {e}")
         
         # Debug: print ids and children for visibility troubleshooting
         try:
-            print("RootWidget ids:", list(self.ids.keys()))
-            print("RootWidget children count:", len(self.children))
-            print("Customers:", self.customers)
+            print(f"[KV_POST] RootWidget ids: {list(self.ids.keys())}")
+            print(f"[KV_POST] RootWidget children count: {len(self.children)}")
+            print(f"[KV_POST] Customers: {self.customers}")
         except Exception as e:
-            print(f"Debug print error: {e}")
+            print(f"[KV_POST] Debug print error: {e}")
         
         # set default date for manual entries
         try:
             self.ids.date_input.text = datetime.date.today().strftime("%d.%m.%Y")
+            print("[KV_POST] Date input set")
         except Exception as e:
-            print(f"Date input error: {e}")
+            print(f"[KV_POST] Date input error: {e}")
         
         # setup activity suggestions
         try:
             self._activity_dropdown = None
             self.ids.activity_input.bind(text=self.on_activity_text)
             self.ids.activity_input.bind(focus=self.on_activity_focus)
+            print("[KV_POST] Activity input bindings set")
         except Exception as e:
-            print(f"Activity input binding error: {e}")
+            print(f"[KV_POST] Activity input binding error: {e}")
         
         # bind customer spinner change to refresh entries
         try:
             self.ids.customer_spinner.bind(text=self.on_customer_changed)
+            print("[KV_POST] Customer spinner binding set")
         except Exception as e:
-            print(f"Customer spinner binding error: {e}")
+            print(f"[KV_POST] Customer spinner binding error: {e}")
 
     def show_error(self, title, message):
         # Show a scrollable error popup and also write a log file for easier sharing
@@ -2219,23 +2229,30 @@ class RootWidget(BoxLayout):
 
 class PoCApp(App):
     def build(self):
-        # Load the KV rules - this applies the <RootWidget>: rule
-        Builder.load_string(KV)
-        
-        # Now create and return the actual RootWidget instance
-        root = RootWidget()
-        return root
+        try:
+            # Load the KV rules - this applies the <RootWidget>: rule
+            Builder.load_string(KV)
+            print("[APP] KV loaded successfully")
+            
+            # Now create and return the actual RootWidget instance
+            root = RootWidget()
+            print("[APP] RootWidget created successfully")
+            return root
+        except Exception as e:
+            print(f"[APP CRITICAL] Build error: {e}")
+            traceback.print_exc()
+            raise
 
     def on_start(self):
-        path = os.path.join(self.user_data_dir, 'stundenerfassung.db')
-        db.init_db(path)
-        print(f"Kivy PoC DB path: {path}")
-        # Debug: print app root widget details
+        """Called after widget tree is built. Initialize DB here."""
         try:
-            root = self.root
-            print("App root:", type(root), "children:", len(root.children))
-        except Exception:
-            pass
+            print("[APP] on_start() called")
+            path = os.path.join(self.user_data_dir, 'stundenerfassung.db')
+            db.init_db(path)
+            print(f"[APP] DB initialized at: {path}")
+        except Exception as e:
+            print(f"[APP] DB init error in on_start: {e}")
+            traceback.print_exc()
 
 
 if __name__ == '__main__':
