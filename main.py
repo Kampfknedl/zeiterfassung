@@ -1,2266 +1,720 @@
+"""
+Zeiterfassung App - Einfache Version mit Excel-Export
+Features: Kunden, Timer, Einträge, Excel-Export (ohne Geldberechnung)
+"""
 from kivy.app import App
-from kivy.lang import Builder
 from kivy.uix.boxlayout import BoxLayout
-from kivy.properties import ListProperty, StringProperty
 from kivy.uix.popup import Popup
 from kivy.uix.label import Label
-from kivy.uix.button import Button
 from kivy.uix.textinput import TextInput
+from kivy.uix.button import Button
+from kivy.uix.scrollview import ScrollView
+from kivy.properties import ListProperty, StringProperty, NumericProperty
 from kivy.clock import Clock
+from kivy.utils import platform
 import os
-import datetime
-import sys
-import traceback
+import time
+from datetime import datetime
 import db
 
 
-def _install_crash_logger():
-    """Capture uncaught exceptions to a crash.txt for easier Android debugging.
+class ZeiterfassungApp(App):
+    """Hauptapp mit Timer und Datenbank-Integration"""
     
-    IMPORTANT: This is called from App.on_start(), NOT at module import!
-    Prevents crash logger from running before Android permissions/context ready.
-    """
-    def _hook(exc_type, exc, tb):
-        timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        lines = [
-            f"[{timestamp}] Uncaught exception",
-            ''.join(traceback.format_exception(exc_type, exc, tb)),
-            '\n'
-        ]
-        candidates = [
-            '/sdcard/Documents/Zeiterfassung/crash.txt',
-            os.path.join(os.path.expanduser('~'), 'Documents', 'Zeiterfassung', 'crash.txt'),
-        ]
-        try:
-            # Fallback to app data dir if app is available
-            app_dir = App.get_running_app().user_data_dir
-            candidates.append(os.path.join(app_dir, 'crash.txt'))
-        except Exception:
-            pass
-
-        for path in candidates:
-            try:
-                os.makedirs(os.path.dirname(path), exist_ok=True)
-                with open(path, 'a', encoding='utf-8') as f:
-                    f.writelines(lines)
-                break
-            except Exception:
-                continue
-
-        # Also print to stderr so logcat picks it up
-        try:
-            sys.__stderr__.write(lines[1])
-        except Exception:
-            pass
-
-        # Call default handler
-        sys.__excepthook__(exc_type, exc, tb)
-
-    sys.excepthook = _hook
-
-KV = '''
-<RootWidget>:
-    orientation: 'vertical'
-    spacing: 8
-    padding: 12
-    canvas.before:
-        Color:
-            rgba: 0.15, 0.15, 0.15, 1
-        Rectangle:
-            pos: self.pos
-            size: self.size
-
-    # Row 1: customer selection - responsive
-    BoxLayout:
-        orientation: 'vertical'
-        size_hint_y: None
-        height: '150dp'
-        spacing: 6
-        canvas.before:
-            Color:
-                rgba: 0.25, 0.25, 0.25, 1
-            RoundedRectangle:
-                pos: self.pos
-                size: self.size
-                radius: [10]
-        padding: 10
-        Label:
-            text: 'Kunde'
-            size_hint_y: None
-            height: '28dp'
-            font_size: '14sp'
-            bold: True
-            color: 0.9, 0.9, 0.9, 1
-            halign: 'left'
-            text_size: self.size
-        Spinner:
-            id: customer_spinner
-            text: root.customers[0] if root.customers else '—'
-            values: root.customers
-            size_hint_y: None
-            height: '44dp'
-            background_normal: ''
-            background_color: 0.35, 0.35, 0.35, 1
-            color: 0.9, 0.9, 0.9, 1
-            font_size: '15sp'
-        BoxLayout:
-            size_hint_y: None
-            height: '44dp'
-            spacing: 8
-            Button:
-                text: '+ Kunde'
-                on_release: root.add_customer()
-                background_normal: ''
-                background_color: 0.3, 0.5, 0.7, 1
-                color: 1, 1, 1, 1
-                font_size: '14sp'
-            Button:
-                text: 'Kunden verwalten'
-                on_release: root.open_customer_management()
-                background_normal: ''
-                background_color: 0.4, 0.4, 0.4, 1
-                color: 1, 1, 1, 1
-                font_size: '14sp'
-
-    # Row 2: activity, date, hours - responsive
-    BoxLayout:
-        orientation: 'vertical'
-        size_hint_y: None
-        height: '280dp'
-        spacing: 6
-        padding: 10
-        canvas.before:
-            Color:
-                rgba: 0.25, 0.25, 0.25, 1
-            RoundedRectangle:
-                pos: self.pos
-                size: self.size
-                radius: [10]
-        Label:
-            text: 'Tätigkeit'
-            size_hint_y: None
-            height: '28dp'
-            font_size: '14sp'
-            bold: True
-            color: 0.9, 0.9, 0.9, 1
-            halign: 'left'
-            text_size: self.size
-        TextInput:
-            id: activity_input
-            multiline: False
-            size_hint_y: None
-            height: '44dp'
-            font_size: '15sp'
-            padding: [12, 10]
-            background_normal: ''
-            background_color: 0.35, 0.35, 0.35, 1
-            foreground_color: 0.9, 0.9, 0.9, 1
-            on_focus: root.on_activity_focus(self, self.focus)
-        BoxLayout:
-            size_hint_y: None
-            height: '44dp'
-            spacing: 8
-            Label:
-                text: 'Datum'
-                size_hint_x: None
-                width: '70dp'
-                font_size: '14sp'
-                bold: True
-                color: 0.9, 0.9, 0.9, 1
-            TextInput:
-                id: date_input
-                text: ''
-                hint_text: 'dd.mm.yyyy'
-                multiline: False
-                font_size: '15sp'
-                padding: [12, 10]
-                background_normal: ''
-                background_color: 0.35, 0.35, 0.35, 1
-                foreground_color: 0.9, 0.9, 0.9, 1
-        BoxLayout:
-            size_hint_y: None
-            height: '48dp'
-            spacing: 8
-            Label:
-                text: 'Std'
-                size_hint_x: None
-                width: '50dp'
-                font_size: '14sp'
-                bold: True
-                color: 0.9, 0.9, 0.9, 1
-            TextInput:
-                id: hours_input
-                text: '1.0'
-                input_filter: 'float'
-                multiline: False
-                font_size: '15sp'
-                padding: [12, 10]
-                background_normal: ''
-                background_color: 0.35, 0.35, 0.35, 1
-                foreground_color: 0.9, 0.9, 0.9, 1
-        Button:
-            text: '+ Eintrag'
-            on_release: root.add_entry(activity_input.text, hours_input.text)
-            size_hint_y: None
-            height: '50dp'
-            background_normal: ''
-            background_color: 0.3, 0.6, 0.4, 1
-            color: 1, 1, 1, 1
-            font_size: '15sp'
-            bold: True
-
-    # Row 3: CSV Export & Timer
-    BoxLayout:
-        orientation: 'vertical'
-        size_hint_y: None
-        height: '230dp'
-        spacing: 6
-        padding: 10
-        canvas.before:
-            Color:
-                rgba: 0.25, 0.25, 0.25, 1
-            RoundedRectangle:
-                pos: self.pos
-                size: self.size
-                radius: [10]
-        Button:
-            text: 'PDF Export erstellen'
-            size_hint_y: None
-            height: '50dp'
-            on_release: root.export_pdf_with_dialog()
-            background_normal: ''
-            background_color: 0.6, 0.4, 0.4, 1
-            color: 1, 1, 1, 1
-            font_size: '16sp'
-            bold: True
-        Button:
-            text: 'Speicherort auswählen'
-            size_hint_y: None
-            height: '44dp'
-            on_release: root.open_export_settings()
-            background_normal: ''
-            background_color: 0.4, 0.4, 0.4, 1
-            color: 1, 1, 1, 1
-            font_size: '14sp'
-            bold: True
-        Button:
-            text: 'Drucken'
-            size_hint_y: None
-            height: '44dp'
-            on_release: root.print_last_export()
-            background_normal: ''
-            background_color: 0.4, 0.4, 0.4, 1
-            color: 1, 1, 1, 1
-            font_size: '14sp'
-            bold: True
-        BoxLayout:
-            size_hint_y: None
-            height: '48dp'
-            spacing: 8
-            Button:
-                id: start_btn
-                text: 'Start'
-                on_release: root.start_timer()
-                background_normal: ''
-                background_color: 0.3, 0.6, 0.4, 1
-                color: 1, 1, 1, 1
-                font_size: '14sp'
-                bold: True
-            Button:
-                id: pause_btn
-                text: 'Pause'
-                disabled: True
-                on_release: root.pause_timer()
-                background_normal: ''
-                background_color: 0.7, 0.6, 0.3, 1
-                color: 1, 1, 1, 1
-                font_size: '14sp'
-                bold: True
-            Button:
-                id: stop_btn
-                text: 'Stop'
-                on_release: root.stop_timer()
-                background_normal: ''
-                background_color: 0.7, 0.4, 0.4, 1
-                color: 1, 1, 1, 1
-                font_size: '14sp'
-                bold: True
-
-    BoxLayout:
-        orientation: 'vertical'
-        spacing: 6
-        padding: [10, 6, 10, 6]
-        canvas.before:
-            Color:
-                rgba: 0.25, 0.25, 0.25, 1
-            RoundedRectangle:
-                pos: self.pos
-                size: self.size
-                radius: [10]
-        Label:
-            text: 'Letzte Einträge'
-            size_hint_y: None
-            height: '32dp'
-            font_size: '14sp'
-            bold: True
-            color: 0.9, 0.9, 0.9, 1
-            halign: 'left'
-            text_size: self.size
-        ScrollView:
-            do_scroll_x: False
-            BoxLayout:
-                id: entries_box
-                orientation: 'vertical'
-                size_hint_y: None
-                height: self.minimum_height
-                spacing: 6
-
-    Label:
-        text: 'made by Benedikt Bernhart'
-        size_hint_y: None
-        height: '24dp'
-        font_size: '11sp'
-        color: 0.6, 0.6, 0.6, 1
-'''
+    def build(self):
+        self.root_widget = RootWidget()
+        return self.root_widget
+    
+    def get_db_path(self):
+        """Plattform-spezifischer Datenbank-Pfad"""
+        if platform == 'android':
+            from android.storage import app_storage_path
+            return os.path.join(app_storage_path(), 'zeiterfassung.db')
+        else:
+            return os.path.join(os.path.dirname(__file__), 'zeiterfassung.db')
 
 
 class RootWidget(BoxLayout):
+    """Haupt-UI"""
     customers = ListProperty([])
-
+    selected_customer = StringProperty('— Bitte wählen —')
+    selected_customer_id = NumericProperty(0)
+    elapsed_time = StringProperty('00:00:00')
+    
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self._timer_start = None
-        self._timer_paused_time = 0  # accumulated paused seconds
-        self._pause_start = None      # when pause was pressed
-        self._timer_popup = None      # active timer notification
-        self._timer_event = None      # scheduled timer update event
-        self._pdf_export_path = None  # User-selected PDF export directory
-        self._last_export_path = None
-        self._last_export_is_uri = False
-
-    def on_kv_post(self, base_widget):
-        """Called when KV layout for this widget is complete."""
-        print("[KV_POST] on_kv_post() called")
+        self.orientation = 'vertical'
+        self.spacing = 10
+        self.padding = 15
         
-        # NOTE: DB init already done in App.on_start(), don't repeat here
-        # Just load UI state and set up bindings
-        
-        try:
-            self.load_customers()
-            print("[KV_POST] Customers loaded")
-        except Exception as e:
-            print(f"[KV_POST] Load customers error: {e}")
-            self.customers = ['—']  # Fallback
-        
-        try:
-            self.refresh_entries()
-            print("[KV_POST] Entries refreshed")
-        except Exception as e:
-            print(f"[KV_POST] Refresh entries error: {e}")
-        
-        # Debug: print ids and children for visibility troubleshooting
-        try:
-            print(f"[KV_POST] RootWidget ids: {list(self.ids.keys())}")
-            print(f"[KV_POST] RootWidget children count: {len(self.children)}")
-            print(f"[KV_POST] Customers: {self.customers}")
-        except Exception as e:
-            print(f"[KV_POST] Debug print error: {e}")
-        
-        # set default date for manual entries
-        try:
-            self.ids.date_input.text = datetime.date.today().strftime("%d.%m.%Y")
-            print("[KV_POST] Date input set")
-        except Exception as e:
-            print(f"[KV_POST] Date input error: {e}")
-        
-        # setup activity suggestions
-        try:
-            self._activity_dropdown = None
-            self.ids.activity_input.bind(text=self.on_activity_text)
-            self.ids.activity_input.bind(focus=self.on_activity_focus)
-            print("[KV_POST] Activity input bindings set")
-        except Exception as e:
-            print(f"[KV_POST] Activity input binding error: {e}")
-        
-        # bind customer spinner change to refresh entries
-        try:
-            self.ids.customer_spinner.bind(text=self.on_customer_changed)
-            print("[KV_POST] Customer spinner binding set")
-        except Exception as e:
-            print(f"[KV_POST] Customer spinner binding error: {e}")
-
-    def show_error(self, title, message):
-        # Show a scrollable error popup and also write a log file for easier sharing
-        try:
-            from kivy.uix.popup import Popup
-            from kivy.uix.boxlayout import BoxLayout
-            from kivy.uix.scrollview import ScrollView
-            from kivy.uix.label import Label
-            from kivy.uix.button import Button
-            root = BoxLayout(orientation='vertical', spacing=8, padding=10)
-            root.canvas.before.clear()
-            
-            sv = ScrollView(size_hint=(1, 1))
-            lbl = Label(text=message, size_hint_y=None, color=(0.9, 0.9, 0.9, 1))
-            # enable wrapping
-            lbl.bind(width=lambda inst, w: setattr(inst, 'text_size', (w, None)))
-            # estimate height based on content length
-            lbl.bind(texture_size=lambda inst, ts: setattr(inst, 'height', ts[1] + 20))
-            sv.add_widget(lbl)
-            root.add_widget(sv)
-            btn = Button(text='OK', size_hint_y=None, height='40dp',
-                        background_normal='', background_color=(0.4, 0.6, 0.8, 1),
-                        color=(1, 1, 1, 1), font_size='14sp')
-            root.add_widget(btn)
-            popup = Popup(title=title, content=root, size_hint=(.9, .7))
-            btn.bind(on_release=popup.dismiss)
-            popup.open()
-        except Exception:
-            # As a last resort, try a minimal popup
-            try:
-                from kivy.uix.popup import Popup
-                from kivy.uix.label import Label
-                Popup(title=title, content=Label(text=message[:500], color=(0.9, 0.9, 0.9, 1)), size_hint=(.9, .6)).open()
-            except Exception:
-                pass
-
-    def write_error_log(self, text):
-        try:
-            out_dir = self.get_documents_dir()
-            os.makedirs(out_dir, exist_ok=True)
-            p = os.path.join(out_dir, 'zeiterfassung_error.log')
-            with open(p, 'a', encoding='utf-8') as f:
-                f.write('\n=== ERROR ===\n')
-                f.write(datetime.datetime.now().isoformat() + '\n')
-                f.write(text)
-                f.write('\n')
-            return p
-        except Exception:
-            return None
-
-    def on_customer_changed(self, instance, value):
-        """Called when customer spinner selection changes - refresh entries list"""
-        self.refresh_entries()
-
-    def on_activity_focus(self, instance, value):
-        # dismiss dropdown when focus lost
-        if not value and getattr(self, '_activity_dropdown', None):
-            try:
-                self._activity_dropdown.dismiss()
-            except Exception:
-                pass
-
-    def on_activity_text(self, instance, value):
-        prefix = (value or '').strip()
-        if not prefix:
-            if getattr(self, '_activity_dropdown', None):
-                try:
-                    self._activity_dropdown.dismiss()
-                except Exception:
-                    pass
-            return
-        # fetch suggestions
-        suggestions = db.get_recent_activities(self.get_db_path(), prefix=prefix, limit=8)
-        if not suggestions:
-            if getattr(self, '_activity_dropdown', None):
-                try:
-                    self._activity_dropdown.dismiss()
-                except Exception:
-                    pass
-            return
-        self.show_activity_dropdown(suggestions, instance)
-
-    def show_activity_dropdown(self, suggestions, target_widget):
-        from kivy.uix.dropdown import DropDown
-        from kivy.uix.button import Button
-        # dismiss older
-        if getattr(self, '_activity_dropdown', None):
-            try:
-                self._activity_dropdown.dismiss()
-            except Exception:
-                pass
-        dd = DropDown()
-        for s in suggestions:
-            btn = Button(text=s, size_hint_y=None, height='36dp')
-            btn.bind(on_release=lambda btn: dd.select(btn.text))
-            dd.add_widget(btn)
-
-        def on_select(instance, selection):
-            try:
-                target_widget.text = selection
-            except Exception:
-                pass
-            try:
-                dd.dismiss()
-            except Exception:
-                pass
-
-        dd.bind(on_select=on_select)
-        # open dropdown under the target widget
-        dd.open(target_widget)
-        self._activity_dropdown = dd
-
-    def get_db_path(self):
-        app_dir = App.get_running_app().user_data_dir
-        os.makedirs(app_dir, exist_ok=True)
-        return os.path.join(app_dir, 'stundenerfassung.db')
-
-    def get_db_dir(self):
-        return os.path.dirname(self.get_db_path())
-
-    def get_documents_dir(self):
-        # Prefer app-specific external Documents directory (no runtime permission needed)
-        try:
-            from jnius import autoclass
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            Environment = autoclass('android.os.Environment')
-
-            context = PythonActivity.mActivity
-            # Use app-specific external files dir: .../Android/data/<pkg>/files/Documents
-            ext_dir = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
-            if ext_dir is not None:
-                docs_path = os.path.join(ext_dir.getAbsolutePath(), 'Zeiterfassung')
-                os.makedirs(docs_path, exist_ok=True)
-                return docs_path
-        except Exception as e:
-            print(f"Android external files dir failed: {e}")
-
-        try:
-            # Fallback: Desktop Documents folder (desktop usage)
-            docs_path = os.path.join(os.path.expanduser('~'), 'Documents', 'Zeiterfassung')
-            os.makedirs(docs_path, exist_ok=True)
-            return docs_path
-        except Exception:
-            # Last resort: app internal data directory
-            return self.get_db_dir()
-
-    def get_fileprovider_authority(self):
-        """Return FileProvider authority matching the current package name."""
-        try:
-            from jnius import autoclass
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            pkg = PythonActivity.mActivity.getPackageName()
-            return f"{pkg}.fileprovider"
-        except Exception:
-            # Fallback to legacy hardcoded value to avoid crashing
-            return "org.tkideneb.zeiterfassung.fileprovider"
-
-    def save_pdf_to_public_documents(self, temp_path, base_filename):
-        """Deprecated: MediaStore path handling caused compatibility issues."""
-        return temp_path, None
-
-    def show_file_viewer(self, filepath_display, customer_name, mime_type='text/csv', auto_share=False):
-        # Show creation success message with sharing option
-        from kivy.uix.popup import Popup
-        from kivy.uix.label import Label
-        from kivy.uix.button import Button
-
-        content = BoxLayout(orientation='vertical', spacing=8, padding=10)
-        content.add_widget(Label(
-            text='CSV erstellt!',
-            size_hint_y=None,
-            height='40dp',
-            font_size='16sp'
-        ))
-        content.add_widget(Label(
-            text=f'Kunde: {customer_name}',
-            size_hint_y=None,
-            height='30dp'
-        ))
-        content.add_widget(Label(
-            text='CSV wurde erfolgreich gespeichert.',
-            size_hint_y=None,
-            height='30dp'
-        ))
-
-        btn_box = BoxLayout(size_hint_y=None, height='50dp', spacing=8)
-        share_btn = Button(text='Teilen')
-        open_btn = Button(text='Oeffnen')
-        close_btn = Button(text='Schliessen')
-        btn_box.add_widget(share_btn)
-        btn_box.add_widget(open_btn)
-        btn_box.add_widget(close_btn)
-        content.add_widget(btn_box)
-
-        popup = Popup(title='Report erstellt', content=content, size_hint=(.9, .5))
-
-        def do_share(*_):
-            success = self.share_file_fileprovider(filepath_display, mime_type=mime_type)
-            if success:
-                popup.dismiss()
-            else:
-                self.show_error('Fehler', 'Datei konnte nicht geteilt werden')
-
-        def do_open(*_):
-            self.open_file(filepath_display, mime_type=mime_type)
-            popup.dismiss()
-
-        share_btn.bind(on_release=do_share)
-        open_btn.bind(on_release=do_open)
-        close_btn.bind(on_release=popup.dismiss)
-        popup.open()
-
-        if auto_share:
-            try:
-                do_share()
-            except Exception:
-                pass
-
-    def open_file(self, filepath, mime_type='text/csv'):
-        """Open a file with default viewer (for sharing)."""
-        try:
-            from jnius import autoclass
-            Intent = autoclass('android.content.Intent')
-            Uri = autoclass('android.net.Uri')
-            File = autoclass('java.io.File')
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-
-            java_file = File(filepath)
-            
-            # Try FileProvider first (Android 7+)
-            try:
-                    FileProvider = autoclass('androidx.core.content.FileProvider')
-                    authority = self.get_fileprovider_authority()
-                    uri = FileProvider.getUriForFile(PythonActivity.mActivity, authority, java_file)
-            except Exception:
-                # Fallback to file:// URI for older devices
-                uri = Uri.fromFile(java_file)
-
-            intent = Intent(Intent.ACTION_VIEW)
-            intent.setDataAndType(uri, mime_type)
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-
-            PythonActivity.mActivity.startActivity(intent)
-        except Exception as e:
-            import traceback
-            error_msg = f"Fehler beim Öffnen: {str(e)}\n\n{traceback.format_exc()}"
-            self.show_error('Fehler', error_msg)
-            self.write_error_log(error_msg)
-
-    def get_downloads_dir(self):
-        # Try Android public Downloads directory; fallback to OS Downloads or app data
-        try:
-            from jnius import autoclass
-            Environment = autoclass('android.os.Environment')
-            downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            return downloads.getAbsolutePath()
-        except Exception:
-            try:
-                return os.path.join(os.path.expanduser('~'), 'Downloads')
-            except Exception:
-                return self.get_db_dir()
-
-    def share_file_fileprovider(self, filepath, mime_type='text/csv', is_uri=False):
-        """Share a file using Android FileProvider (Android 7+) with fallback."""
-        try:
-            from jnius import autoclass, cast
-            Intent = autoclass('android.content.Intent')
-            Uri = autoclass('android.net.Uri')
-            File = autoclass('java.io.File')
-            String = autoclass('java.lang.String')
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-
-            context = PythonActivity.mActivity
-            
-            if is_uri or (filepath and filepath.startswith('content://')):
-                # Already a content URI
-                uri = Uri.parse(filepath)
-            else:
-                # Regular file path - convert to URI
-                java_file = File(filepath)
-                
-                # Try FileProvider first (Android 7+, more secure)
-                try:
-                    FileProvider = autoclass('androidx.core.content.FileProvider')
-                    authority = self.get_fileprovider_authority()
-                    uri = FileProvider.getUriForFile(context, authority, java_file)
-                except Exception as fp_error:
-                    print(f"FileProvider for share failed: {fp_error}")
-                    # Fallback to file:// URI for Android 6 and below
-                    uri = Uri.fromFile(java_file)
-
-            # Create SEND intent
-            intent = Intent(Intent.ACTION_SEND)
-            intent.setType(mime_type)
-            intent.putExtra(Intent.EXTRA_STREAM, uri)
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-
-            # Create chooser
-            file_type = 'PDF' if mime_type == 'application/pdf' else 'Report'
-            title = cast('java.lang.CharSequence', String(f'{file_type} teilen via'))
-            chooser = Intent.createChooser(intent, title)
-            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(chooser)
-            
-            return True
-        except Exception as e:
-            import traceback
-            print(f"Share failed: {e}")
-            print(traceback.format_exc())
-            return False
-
-    def share_pdf(self, uri_string):
-        # Legacy: still route to generic share for compatibility
-        try:
-            return self.share_file_fileprovider(uri_string, mime_type='text/csv')
-        except Exception as e:
-            import traceback
-            error_msg = f"Fehler beim Teilen: {str(e)}\n\n{traceback.format_exc()}"
-            self.show_error('Fehler', error_msg)
-            self.write_error_log(error_msg)
-
-    def load_customers(self):
-        path = self.get_db_path()
-        self.customers = db.get_customers(path)
-
-    def add_customer(self):
-        # Simple form to add customer with address/email/phone
-        from kivy.uix.popup import Popup
-        from kivy.uix.textinput import TextInput
-        from kivy.uix.label import Label
-        from kivy.uix.button import Button
-        content = BoxLayout(orientation='vertical', spacing=8)
-        name_input = TextInput(multiline=False, hint_text='Name')
-        address_input = TextInput(multiline=False, hint_text='Adresse')
-        email_input = TextInput(multiline=False, hint_text='Email')
-        phone_input = TextInput(multiline=False, hint_text='Telefon')
-        btn = BoxLayout(size_hint_y=None, height='40dp')
-        btn_ok = Button(text='Speichern')
-        btn_cancel = Button(text='Abbrechen')
-        content.add_widget(name_input)
-        content.add_widget(address_input)
-        content.add_widget(email_input)
-        content.add_widget(phone_input)
-        btn.add_widget(btn_ok)
-        btn.add_widget(btn_cancel)
-        content.add_widget(btn)
-        popup = Popup(title='Neuer Kunde', content=content, size_hint=(.9, .6))
-
-        def do_add(*a):
-            name = name_input.text.strip()
-            if name:
-                path = self.get_db_path()
-                # add customer and update details
-                db.add_customer(path, name)
-                db.update_customer(path, name, address_input.text.strip(), email_input.text.strip(), phone_input.text.strip())
-                self.load_customers()
-                popup.dismiss()
-
-        btn_ok.bind(on_release=do_add)
-        btn_cancel.bind(on_release=lambda *x: popup.dismiss())
-        popup.open()
-
-    def open_customer_management(self):
-        # Popup to list and edit customers
-        from kivy.uix.popup import Popup
-        from kivy.uix.recycleview import RecycleView
-        from kivy.uix.gridlayout import GridLayout
-        from kivy.uix.button import Button
-        from kivy.uix.textinput import TextInput
-
-        layout = GridLayout(cols=1, spacing=8, size_hint_y=None)
-        layout.bind(minimum_height=layout.setter('height'))
-
-        from kivy.uix.label import Label
-        for name in self.customers:
-            row = BoxLayout(size_hint_y=None, height='40dp')
-            lbl = Label(text=name)
-            edit_btn = Button(text='Bearbeiten', size_hint_x=None, width='100dp')
-            del_btn = Button(text='Löschen', size_hint_x=None, width='80dp')
-
-            def make_edit(n):
-                def _edit(*a):
-                    self.open_edit_customer(n, popup)
-                return _edit
-
-            def make_delete(n):
-                def _delete(*a):
-                    path = self.get_db_path()
-                    db.delete_customer(path, n)
-                    self.load_customers()
-                    popup.dismiss()
-                    self.open_customer_management()
-                return _delete
-
-            edit_btn.bind(on_release=make_edit(name))
-            del_btn.bind(on_release=make_delete(name))
-            row.add_widget(lbl)
-            row.add_widget(edit_btn)
-            row.add_widget(del_btn)
-            layout.add_widget(row)
-
-        from kivy.uix.scrollview import ScrollView
-        sv = ScrollView(size_hint=(1, .8))
-        sv.add_widget(layout)
-        root = BoxLayout(orientation='vertical')
-        root.add_widget(sv)
-        close = Button(text='Schließen', size_hint_y=None, height='40dp')
-        root.add_widget(close)
-        popup = Popup(title='Kunden verwalten', content=root, size_hint=(.95, .9))
-        close.bind(on_release=popup.dismiss)
-        popup.open()
-
-    def open_edit_customer(self, name, parent_popup=None):
-        from kivy.uix.popup import Popup
-        from kivy.uix.textinput import TextInput
-        from kivy.uix.button import Button
-        info = db.get_customer(self.get_db_path(), name)
-        if not info:
-            return
-        _, name, address, email, phone = info
-        content = BoxLayout(orientation='vertical', spacing=8)
-        name_input = TextInput(text=name, multiline=False)
-        address_input = TextInput(text=address or '', multiline=False)
-        email_input = TextInput(text=email or '', multiline=False)
-        phone_input = TextInput(text=phone or '', multiline=False)
-        btn = BoxLayout(size_hint_y=None, height='40dp')
-        ok = Button(text='Speichern')
-        cancel = Button(text='Abbrechen')
-        btn.add_widget(ok)
-        btn.add_widget(cancel)
-        content.add_widget(name_input)
-        content.add_widget(address_input)
-        content.add_widget(email_input)
-        content.add_widget(phone_input)
-        content.add_widget(btn)
-        popup = Popup(title=f'Kunde bearbeiten: {name}', content=content, size_hint=(.9, .6))
-
-        def do_save(*a):
-            new_name = name_input.text.strip()
-            # update name and details
-            db.update_customer_full(self.get_db_path(), name, new_name=new_name, address=address_input.text.strip(), email=email_input.text.strip(), phone=phone_input.text.strip())
-            # Note: We don't update the primary key name changes extensively here for simplicity
-            self.load_customers()
-            popup.dismiss()
-            if parent_popup:
-                parent_popup.dismiss()
-
-        ok.bind(on_release=do_save)
-        cancel.bind(on_release=lambda *x: popup.dismiss())
-        popup.open()
-
-    def add_entry(self, activity, hours):
-        """Add new time entry"""
-        print(f"\n[ADD_ENTRY] ===== ADD_ENTRY CALLED =====")
-        print(f"[ADD_ENTRY] Activity: '{activity}'")
-        print(f"[ADD_ENTRY] Hours: '{hours}'")
-        
-        customer = self.ids.customer_spinner.text
-        print(f"[ADD_ENTRY] Customer: '{customer}'")
-        
-        # Validate activity
-        activity = activity.strip()
-        print(f"[ADD_ENTRY] Activity stripped: '{activity}'")
-        
-        if not activity:
-            print(f"[ADD_ENTRY] ❌ Activity is empty!")
-            self.show_error('Fehler', 'Bitte Tätigkeit eingeben')
-            return
-            
-        try:
-            hours_f = float(hours)
-            if hours_f <= 0:
-                print(f"[ADD_ENTRY] ❌ Hours <= 0: {hours_f}")
-                self.show_error('Fehler', 'Stunden müssen größer als 0 sein')
-                return
-        except Exception as e:
-            print(f"[ADD_ENTRY] ❌ Invalid hours format: {hours}, Error: {e}")
-            self.show_error('Fehler', 'Ungültiges Stundenformat')
-            return
-        
-        if not customer or customer == '—':
-            print(f"[ADD_ENTRY] ❌ No customer selected")
-            self.show_error('Fehler', 'Bitte Kunde auswählen')
-            return
-        
-        # allow manual date entry in format dd.mm.yyyy for backdating
-        date_text = (self.ids.date_input.text or '').strip()
-        start = None
-        end = None
-        try:
-            if date_text:
-                dt = datetime.datetime.strptime(date_text, "%d.%m.%Y")
-                # store as ISO date (no time)
-                start = dt.date().isoformat()
-                end = start
-                print(f"[ADD_ENTRY] Date from input: {start}")
-        except Exception as e:
-            print(f"[ADD_ENTRY] ❌ Invalid date: {date_text}, Error: {e}")
-            self.show_error('Datum ungültig', 'Bitte Datum im Format dd.mm.yyyy eingeben.')
-            return
-
-        if not start:
-            now = datetime.datetime.now().isoformat()
-            start = now
-            end = now
-            print(f"[ADD_ENTRY] Using current time: {start}")
-
-        path = self.get_db_path()
-        print(f"[ADD_ENTRY] Saving to DB at: {path}")
-        
-        try:
-            db.add_entry(path, customer, activity, start, end, hours_f)
-            print(f"[ADD_ENTRY] ✅ Entry saved successfully!")
-            print(f"[ADD_ENTRY] Customer: {customer}, Activity: {activity}, Hours: {hours_f}")
-        except Exception as db_err:
-            print(f"[ADD_ENTRY] ❌ Database error: {db_err}")
-            import traceback
-            print(traceback.format_exc())
-            self.show_error('Speicherfehler', f'Eintrag konnte nicht gespeichert werden:\n{str(db_err)}')
-            return
-        
-        # Clear inputs after saving
-        print(f"[ADD_ENTRY] Clearing inputs...")
-        self.ids.activity_input.text = ''
-        self.ids.hours_input.text = '1.0'
-        # Reset date to today
-        self.ids.date_input.text = datetime.date.today().strftime('%d.%m.%Y')
-        # Focus back to activity for next entry
-        self.ids.activity_input.focus = True
-        print(f"[ADD_ENTRY] Refreshing entries...")
-        self.refresh_entries()
-        print(f"[ADD_ENTRY] ===== ENTRY ADDED COMPLETE =====\n")
-
-    def start_timer(self):
-        customer = self.ids.customer_spinner.text
-        if not customer or customer == '—':
-            from kivy.uix.popup import Popup
-            from kivy.uix.label import Label
-            Popup(title='Fehler', content=Label(text='Bitte Kunde auswählen'), size_hint=(.6, .3)).open()
-            return
-        
-        # Validate activity is entered
-        activity = self.ids.activity_input.text.strip()
-        if not activity:
-            from kivy.uix.popup import Popup
-            from kivy.uix.label import Label
-            Popup(title='Fehler', content=Label(text='Bitte Tätigkeit eingeben'), size_hint=(.6, .3)).open()
-            return
-        
-        if self._timer_start is not None:
-            # already running
-            return
-        
-        self._timer_start = datetime.datetime.now()
+        # Timer state
+        self._timer_start = 0
         self._timer_paused_time = 0
-        self._pause_start = None
-        # disable start, enable pause and stop
-        try:
-            self.ids.start_btn.disabled = True
-            self.ids.pause_btn.disabled = False
-            self.ids.stop_btn.disabled = False
-        except Exception:
-            pass
+        self._timer_event = None
         
-        # Show timer notification with live updates
-        self._show_timer_notification()
-
+        # Excel-Speicherpfad (Standard: aktuelles Verzeichnis)
+        self.excel_export_path = os.path.dirname(__file__) if os.path.dirname(__file__) else os.getcwd()
+        
+        # Build UI
+        Clock.schedule_once(lambda dt: self.build_ui(), 0)
+        Clock.schedule_once(lambda dt: self.load_customers(), 0.1)
     
-    def _format_elapsed_time(self):
-        """Calculate and format elapsed time (excluding pauses)"""
-        if self._timer_start is None:
-            return "00:00:00"
-        
-        now = datetime.datetime.now()
-        total_seconds = (now - self._timer_start).total_seconds()
-        
-        # Subtract pause time
-        if self._pause_start is not None:
-            total_seconds -= (now - self._pause_start).total_seconds()
-        total_seconds -= self._timer_paused_time
-        
-        hours = int(total_seconds // 3600)
-        minutes = int((total_seconds % 3600) // 60)
-        seconds = int(total_seconds % 60)
-        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+    def get_db_path(self):
+        """DB-Pfad von App holen"""
+        return App.get_running_app().get_db_path()
     
-    def _show_timer_notification(self):
-        """Show popup with live timer, pause, and stop buttons"""
-        from kivy.uix.popup import Popup
-        from kivy.uix.boxlayout import BoxLayout
-        from kivy.uix.label import Label
-        from kivy.uix.button import Button
-        from kivy.clock import Clock
+    def round_to_quarter_hour(self, hours):
+        """Runde Stunden auf 0.25 h (15 Minuten) auf"""
+        import math
+        return math.ceil(hours * 4) / 4.0
+    
+    def build_ui(self):
+        """Erstelle UI-Komponenten"""
+        self.clear_widgets()
         
-        # Close any existing timer popup
-        if self._timer_popup is not None:
-            try:
-                self._timer_popup.dismiss()
-            except Exception:
-                pass
+        # === KUNDEN-AUSWAHL ===
+        customer_box = BoxLayout(orientation='vertical', size_hint_y=None, height=120, spacing=5)
+        customer_box.add_widget(Label(text='Kunde', size_hint_y=None, height=30, bold=True))
         
-        # Cancel any existing scheduled update
-        if self._timer_event is not None:
-            self._timer_event.cancel()
-            self._timer_event = None
+        self.customer_spinner = Button(
+            text=self.selected_customer,
+            size_hint_y=None, 
+            height=50,
+            background_color=(0.3, 0.3, 0.3, 1)
+        )
+        self.customer_spinner.bind(on_release=self.show_customer_popup)
+        customer_box.add_widget(self.customer_spinner)
         
-        # Create content layout
+        # Kunden-Verwaltungs-Buttons
+        customer_btn_box = BoxLayout(size_hint_y=None, height=40, spacing=5)
+        add_customer_btn = Button(text='+ Neuer Kunde', background_color=(0.2, 0.6, 0.2, 1))
+        add_customer_btn.bind(on_release=lambda x: self.add_customer_popup())
+        customer_btn_box.add_widget(add_customer_btn)
+        
+        manage_btn = Button(text='⚙ Verwalten', background_color=(0.5, 0.5, 0.2, 1))
+        manage_btn.bind(on_release=lambda x: self.open_customer_management())
+        customer_btn_box.add_widget(manage_btn)
+        customer_box.add_widget(customer_btn_box)
+        
+        self.add_widget(customer_box)
+        
+        # === AKTIVITÄT ===
+        activity_box = BoxLayout(orientation='vertical', size_hint_y=None, height=90, spacing=5)
+        activity_box.add_widget(Label(text='Tätigkeit', size_hint_y=None, height=30, bold=True))
+        self.activity_input = TextInput(hint_text='z.B. Mais dreschen', multiline=False, size_hint_y=None, height=50)
+        activity_box.add_widget(self.activity_input)
+        self.add_widget(activity_box)
+        
+        # === TIMER ===
+        timer_box = BoxLayout(orientation='vertical', size_hint_y=None, height=140, spacing=5)
+        timer_box.add_widget(Label(text='Timer', size_hint_y=None, height=30, bold=True))
+        
+        self.time_label = Label(text=self.elapsed_time, size_hint_y=None, height=50, font_size='32sp')
+        timer_box.add_widget(self.time_label)
+        
+        timer_buttons = BoxLayout(size_hint_y=None, height=50, spacing=5)
+        self.start_btn = Button(text='▶ Start', background_color=(0.2, 0.7, 0.2, 1))
+        self.pause_btn = Button(text='⏸ Pause', background_color=(0.7, 0.5, 0.2, 1), disabled=True)
+        self.stop_btn = Button(text='⏹ Stop', background_color=(0.7, 0.2, 0.2, 1), disabled=True)
+        
+        self.start_btn.bind(on_release=lambda x: self.start_timer())
+        self.pause_btn.bind(on_release=lambda x: self.pause_timer())
+        self.stop_btn.bind(on_release=lambda x: self.stop_timer())
+        
+        timer_buttons.add_widget(self.start_btn)
+        timer_buttons.add_widget(self.pause_btn)
+        timer_buttons.add_widget(self.stop_btn)
+        timer_box.add_widget(timer_buttons)
+        
+        # Manueller Eintrag-Button
+        manual_btn = Button(text='⏱ Stunden manuell nachtragen', size_hint_y=None, height=45, background_color=(0.3, 0.3, 0.5, 1))
+        manual_btn.bind(on_release=lambda x: self.add_manual_entry())
+        timer_box.add_widget(manual_btn)
+        
+        self.add_widget(timer_box)
+        
+        # === EINTRÄGE-LISTE ===
+        entries_label = Label(text='Gespeicherte Einträge', size_hint_y=None, height=40, bold=True)
+        self.add_widget(entries_label)
+        
+        scroll = ScrollView()
+        self.entries_list = BoxLayout(orientation='vertical', spacing=5, size_hint_y=None)
+        self.entries_list.bind(minimum_height=self.entries_list.setter('height'))
+        scroll.add_widget(self.entries_list)
+        self.add_widget(scroll)
+        
+        # === EXCEL-EXPORT ===
+        excel_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=50, spacing=5)
+        excel_btn = Button(text='📊 Excel-Report erstellen', background_color=(0.2, 0.6, 0.3, 1))
+        excel_btn.bind(on_release=lambda x: self.export_excel())
+        excel_box.add_widget(excel_btn)
+        
+        path_btn = Button(text='📁', size_hint_x=None, width=60, background_color=(0.4, 0.4, 0.4, 1))
+        path_btn.bind(on_release=lambda x: self.change_excel_path())
+        excel_box.add_widget(path_btn)
+        
+        self.add_widget(excel_box)
+    
+    def load_customers(self):
+        """Lade Kunden aus DB"""
+        customers = db.get_all_customers(self.get_db_path())
+        self.customers = [c[1] for c in customers]  # c[1] = name
+        if not self.customers:
+            self.customers = ['— Keine Kunden —']
+    
+    def show_customer_popup(self, instance):
+        """Zeige Kunden-Auswahl"""
         content = BoxLayout(orientation='vertical', spacing=10, padding=10)
         
-        # Customer and activity labels
-        activity = self.ids.activity_input.text.strip() or 'Keine Angabe'
-        customer = self.ids.customer_spinner.text
+        scroll = ScrollView()
+        btn_box = BoxLayout(orientation='vertical', spacing=5, size_hint_y=None)
+        btn_box.bind(minimum_height=btn_box.setter('height'))
         
-        content.add_widget(Label(
-            text=f'Kunde: {customer}',
-            size_hint_y=None,
-            height='30dp',
-            font_size='14sp'
-        ))
+        for customer in self.customers:
+            if customer == '— Keine Kunden —':
+                continue
+            btn = Button(text=customer, size_hint_y=None, height=50)
+            btn.bind(on_release=lambda x, c=customer: self.select_customer(c, popup))
+            btn_box.add_widget(btn)
         
-        content.add_widget(Label(
-            text=f'Tätigkeit: {activity}',
-            size_hint_y=None,
-            height='30dp',
-            font_size='13sp'
-        ))
+        scroll.add_widget(btn_box)
+        content.add_widget(scroll)
         
-        # Time display label
-        time_label = Label(
-            text=self._format_elapsed_time(),
-            size_hint_y=None,
-            height='60dp',
-            font_size='48sp',
-            bold=True,
-            color=(0.2, 0.8, 0.2, 1)  # Green
-        )
-        content.add_widget(time_label)
+        popup = Popup(title='Kunde wählen', content=content, size_hint=(0.9, 0.7))
+        popup.open()
+    
+    def select_customer(self, customer_name, popup):
+        """Kunde auswählen"""
+        self.selected_customer = customer_name
+        self.customer_spinner.text = customer_name
         
-        # Button layout
-        button_layout = BoxLayout(size_hint_y=None, height='50dp', spacing=8)
+        # Hole Customer ID
+        customer = db.get_customer_by_name(self.get_db_path(), customer_name)
+        if customer:
+            self.selected_customer_id = customer[0]
         
-        pause_btn = Button(text='Pause' if self._pause_start is None else 'Fortsetzen')
-        stop_btn = Button(text='Beenden')
-        close_btn = Button(text='Schließen')
+        popup.dismiss()
+        self.refresh_entries()
+    
+    def add_customer_popup(self):
+        """Popup zum Hinzufügen eines neuen Kunden"""
+        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
         
-        button_layout.add_widget(pause_btn)
-        button_layout.add_widget(stop_btn)
-        button_layout.add_widget(close_btn)
-        content.add_widget(button_layout)
+        content.add_widget(Label(text='Neuer Kunde', size_hint_y=None, height=30, bold=True))
         
-        # Create popup
-        self._timer_popup = Popup(
-            title='⏱️  Arbeitszeit läuft',
-            content=content,
-            size_hint=(0.85, 0.5),
-            auto_dismiss=False
-        )
+        content.add_widget(Label(text='Name:', size_hint_y=None, height=30))
+        name_input = TextInput(multiline=False, size_hint_y=None, height=50)
+        content.add_widget(name_input)
         
-        def update_timer(*args):
-            """Update timer display every second"""
-            if self._timer_start is None:
-                # Timer stopped, close popup
-                if self._timer_popup is not None:
-                    try:
-                        self._timer_popup.dismiss()
-                    except Exception:
-                        pass
+        # Optionale Felder auskommentiert - können später aktiviert werden
+        # content.add_widget(Label(text='Adresse:', size_hint_y=None, height=30))
+        # address_input = TextInput(multiline=False, size_hint_y=None, height=50)
+        # content.add_widget(address_input)
+        
+        btn_box = BoxLayout(size_hint_y=None, height=50, spacing=10)
+        save_btn = Button(text='Speichern', background_color=(0.2, 0.7, 0.2, 1))
+        cancel_btn = Button(text='Abbrechen', background_color=(0.7, 0.2, 0.2, 1))
+        
+        popup = Popup(title='Neuer Kunde', content=content, size_hint=(0.9, 0.5))
+        
+        def save_customer(instance):
+            name = name_input.text.strip()
+            if not name:
+                name_input.hint_text = 'Bitte Name eingeben!'
                 return
             
-            # Update time label
-            time_label.text = self._format_elapsed_time()
+            # Stundensatz auf 0 setzen (nicht verwendet)
+            db.add_customer(self.get_db_path(), name, 0.0, '', '', '')
+            popup.dismiss()
+            self.load_customers()
+            self.show_message('Erfolg', f'Kunde "{name}" gespeichert!')
+        
+        save_btn.bind(on_release=save_customer)
+        cancel_btn.bind(on_release=popup.dismiss)
+        
+        btn_box.add_widget(save_btn)
+        btn_box.add_widget(cancel_btn)
+        content.add_widget(btn_box)
+        
+        popup.open()
+    
+    def open_customer_management(self):
+        """Öffne Kunden-Verwaltung"""
+        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        
+        scroll = ScrollView()
+        customer_list = BoxLayout(orientation='vertical', spacing=5, size_hint_y=None)
+        customer_list.bind(minimum_height=customer_list.setter('height'))
+        
+        customers = db.get_all_customers(self.get_db_path())
+        for customer in customers:
+            cust_id, name, hourly_rate, address, email, phone = customer
             
-            # Update pause button text
-            new_text = 'Pause' if self._pause_start is None else 'Fortsetzen'
-            if pause_btn.text != new_text:
-                pause_btn.text = new_text
+            cust_box = BoxLayout(size_hint_y=None, height=50, spacing=5)
+            cust_box.add_widget(Label(text=name, halign='left'))
+            
+            edit_btn = Button(text='✏', size_hint_x=None, width=50, background_color=(0.3, 0.5, 0.7, 1))
+            edit_btn.bind(on_release=lambda x, c=customer: self.edit_customer_popup(c, popup))
+            cust_box.add_widget(edit_btn)
+            
+            del_btn = Button(text='🗑', size_hint_x=None, width=50, background_color=(0.7, 0.2, 0.2, 1))
+            del_btn.bind(on_release=lambda x, c_id=cust_id, n=name: self.delete_customer_confirm(c_id, n, popup))
+            cust_box.add_widget(del_btn)
+            
+            customer_list.add_widget(cust_box)
         
-        def on_pause(*args):
-            """Handle pause button click"""
-            self.pause_timer()
-            update_timer()
+        scroll.add_widget(customer_list)
+        content.add_widget(scroll)
         
-        def on_stop(*args):
-            """Handle stop button click"""
-            self.stop_timer()
-            # Popup will close automatically when timer stops
+        close_btn = Button(text='Schließen', size_hint_y=None, height=50)
+        popup = Popup(title='Kunden verwalten', content=content, size_hint=(0.9, 0.8))
+        close_btn.bind(on_release=popup.dismiss)
+        content.add_widget(close_btn)
         
-        def on_close(*args):
-            """Close popup but keep timer running"""
-            if self._timer_popup is not None:
-                try:
-                    self._timer_popup.dismiss()
-                except Exception:
-                    pass
-                self._timer_popup = None
-            # Cancel update event
-            if self._timer_event is not None:
-                self._timer_event.cancel()
-                self._timer_event = None
+        popup.open()
+    
+    def edit_customer_popup(self, customer, parent_popup):
+        """Kunde bearbeiten"""
+        cust_id, name, hourly_rate, address, email, phone = customer
         
-        pause_btn.bind(on_release=on_pause)
-        stop_btn.bind(on_release=on_stop)
-        close_btn.bind(on_release=on_close)
+        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        content.add_widget(Label(text=f'Kunde bearbeiten: {name}', size_hint_y=None, height=30, bold=True))
         
-        # Schedule timer updates every second
-        self._timer_event = Clock.schedule_interval(update_timer, 1.0)
+        content.add_widget(Label(text='Name:', size_hint_y=None, height=30))
+        name_input = TextInput(text=name, multiline=False, size_hint_y=None, height=50)
+        content.add_widget(name_input)
         
-        # Show popup
-        self._timer_popup.open()
-
+        btn_box = BoxLayout(size_hint_y=None, height=50, spacing=10)
+        save_btn = Button(text='Speichern', background_color=(0.2, 0.7, 0.2, 1))
+        cancel_btn = Button(text='Abbrechen', background_color=(0.7, 0.2, 0.2, 1))
+        
+        popup = Popup(title='Kunde bearbeiten', content=content, size_hint=(0.9, 0.5))
+        
+        def save_changes(instance):
+            new_name = name_input.text.strip()
+            if not new_name:
+                name_input.hint_text = 'Bitte Name eingeben!'
+                return
+            
+            db.update_customer(self.get_db_path(), cust_id, new_name, 0.0, '', '', '')
+            popup.dismiss()
+            parent_popup.dismiss()
+            self.load_customers()
+            self.show_message('Erfolg', f'Kunde "{new_name}" aktualisiert!')
+        
+        save_btn.bind(on_release=save_changes)
+        cancel_btn.bind(on_release=popup.dismiss)
+        
+        btn_box.add_widget(save_btn)
+        btn_box.add_widget(cancel_btn)
+        content.add_widget(btn_box)
+        
+        popup.open()
+    
+    def delete_customer_confirm(self, customer_id, customer_name, parent_popup):
+        """Bestätigung vor Löschen"""
+        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        content.add_widget(Label(text=f'Kunde "{customer_name}" wirklich löschen?\\n\\nAlle Einträge gehen verloren!'))
+        
+        btn_box = BoxLayout(size_hint_y=None, height=50, spacing=10)
+        yes_btn = Button(text='Ja, löschen', background_color=(0.7, 0.2, 0.2, 1))
+        no_btn = Button(text='Abbrechen', background_color=(0.3, 0.3, 0.3, 1))
+        
+        popup = Popup(title='Löschen bestätigen', content=content, size_hint=(0.8, 0.4))
+        
+        def do_delete(instance):
+            db.delete_customer(self.get_db_path(), customer_id)
+            popup.dismiss()
+            parent_popup.dismiss()
+            self.load_customers()
+            self.show_message('Erfolg', f'Kunde "{customer_name}" gelöscht!')
+        
+        yes_btn.bind(on_release=do_delete)
+        no_btn.bind(on_release=popup.dismiss)
+        
+        btn_box.add_widget(yes_btn)
+        btn_box.add_widget(no_btn)
+        content.add_widget(btn_box)
+        
+        popup.open()
+    
+    def start_timer(self):
+        """Timer starten"""
+        if not self.selected_customer_id:
+            self.show_message('Fehler', 'Bitte zuerst Kunden auswählen!')
+            return
+        
+        if not self.activity_input.text.strip():
+            self.show_message('Fehler', 'Bitte Tätigkeit eingeben!')
+            return
+        
+        self._timer_start = time.time() - self._timer_paused_time
+        self._timer_event = Clock.schedule_interval(self.update_timer, 0.1)
+        
+        self.start_btn.disabled = True
+        self.pause_btn.disabled = False
+        self.stop_btn.disabled = False
+    
     def pause_timer(self):
-        if self._timer_start is None:
-            return
-        if self._pause_start is None:
-            # Start pause
-            self._pause_start = datetime.datetime.now()
-            try:
-                self.ids.pause_btn.text = 'Fortsetzen'
-            except Exception:
-                pass
-        else:
-            # Resume from pause
-            pause_duration = (datetime.datetime.now() - self._pause_start).total_seconds()
-            self._timer_paused_time += pause_duration
-            self._pause_start = None
-            try:
-                self.ids.pause_btn.text = 'Pause'
-            except Exception:
-                pass
-
-    def stop_timer(self):
-        if self._timer_start is None:
-            return
-        
-        # Close notification popup
-        if self._timer_popup is not None:
-            try:
-                self._timer_popup.dismiss()
-            except Exception:
-                pass
-            self._timer_popup = None
-        
-        # Cancel timer update event
-        if self._timer_event is not None:
+        """Timer pausieren"""
+        if self._timer_event:
             self._timer_event.cancel()
             self._timer_event = None
         
-        end = datetime.datetime.now()
+        self._timer_paused_time = time.time() - self._timer_start
         
-        # Calculate active time (excluding pauses)
-        total_seconds = (end - self._timer_start).total_seconds()
-        if self._pause_start is not None:
-            # Currently paused - add current pause duration
-            total_seconds -= (end - self._pause_start).total_seconds()
-        total_seconds -= self._timer_paused_time
+        self.start_btn.disabled = False
+        self.start_btn.text = '▶ Fortsetzen'
+        self.pause_btn.disabled = True
+    
+    def update_timer(self, dt):
+        """Timer aktualisieren"""
+        elapsed = time.time() - self._timer_start
+        hours = int(elapsed // 3600)
+        minutes = int((elapsed % 3600) // 60)
+        seconds = int(elapsed % 60)
+        self.elapsed_time = f'{hours:02d}:{minutes:02d}:{seconds:02d}'
+        self.time_label.text = self.elapsed_time
+    
+    def stop_timer(self):
+        """Timer stoppen und speichern"""
+        if self._timer_event:
+            self._timer_event.cancel()
+            self._timer_event = None
         
-        raw_hours = total_seconds / 3600.0
-        # round up to nearest 0.25 hours
-        import math
-        billed = math.ceil(raw_hours / 0.25) * 0.25
-        # create entry
-        path = self.get_db_path()
-        db.add_entry(path, self.ids.customer_spinner.text, self.ids.activity_input.text or 'Keine Angabe', self._timer_start.isoformat(), end.isoformat(), billed)
-        # reset timer and buttons
-        self._timer_start = None
+        total_seconds = time.time() - self._timer_start
+        duration_hours = total_seconds / 3600.0
+        duration_hours = self.round_to_quarter_hour(duration_hours)
+        
+        # Speichere in DB
+        now = datetime.now()
+        start_time = (now - datetime.timedelta(seconds=total_seconds)).strftime('%Y-%m-%d %H:%M:%S')
+        end_time = now.strftime('%Y-%m-%d %H:%M:%S')
+        
+        db.add_entry(
+            self.get_db_path(),
+            self.selected_customer_id,
+            self.activity_input.text.strip(),
+            start_time,
+            end_time,
+            duration_hours,
+            ''  # Kein Kommentar beim Timer
+        )
+        
+        # Reset
+        self._timer_start = 0
         self._timer_paused_time = 0
-        self._pause_start = None
-        try:
-            self.ids.start_btn.disabled = False
-            self.ids.pause_btn.disabled = True
-            self.ids.pause_btn.text = 'Pause'
-            self.ids.stop_btn.disabled = True
-        except Exception:
-            pass
-        # show confirmation
-        from kivy.uix.popup import Popup
-        from kivy.uix.label import Label
-        Popup(title='Erfasst', content=Label(text=f'Erfasst: {billed:.2f} Std (aufgerundet)'), size_hint=(.7, .3)).open()
-        self.refresh_entries()
-
-    def export_csv(self, auto_share=False):
-        selected_customer = self.ids.customer_spinner.text
-        if not selected_customer or selected_customer == '—':
-            self.show_error('Fehler', 'Bitte Kunde auswählen')
-            return
-
-        rows = db.get_entries(self.get_db_path(), selected_customer)
-        if not rows:
-            from kivy.uix.popup import Popup
-            from kivy.uix.label import Label
-            Popup(title='Info', content=Label(text='Keine Einträge für den ausgewählten Kunden'), size_hint=(.6, .3)).open()
-            return
-
-        try:
-            import csv
-            from collections import defaultdict
-
-            out_dir = self.get_documents_dir()
-            os.makedirs(out_dir, exist_ok=True)
-            base_name = f"report_{selected_customer.replace(' ', '_')}.csv"
-            temp_path = os.path.join(out_dir, base_name)
-
-            months_data = defaultdict(list)
-            for r in rows:
-                date_str = (r[3] or '')[:10]
-                month_key = date_str[:7] if date_str else "Undatiert"
-                months_data[month_key].append(r)
-
-            sorted_months = sorted(months_data.keys(), reverse=True)
-            grand_total = 0.0
-
-            with open(temp_path, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f, delimiter=';')
-                writer.writerow(['Kunde', selected_customer])
-                writer.writerow(['Erstellt am', datetime.datetime.now().isoformat(timespec='seconds')])
-                cust = db.get_customer(self.get_db_path(), selected_customer)
-                if cust and cust[2]:
-                    writer.writerow(['Adresse', cust[2]])
-                if cust and cust[3]:
-                    writer.writerow(['Email', cust[3]])
-                if cust and cust[4]:
-                    writer.writerow(['Telefon', cust[4]])
-                writer.writerow([])
-                writer.writerow(['Monat', 'Datum', 'Tätigkeit', 'Stunden'])
-
-                for month_key in sorted_months:
-                    rows_in_month = months_data[month_key]
-                    month_total = 0.0
-
-                    for r in rows_in_month:
-                        date = (r[3] or '')[:10]
-                        act = r[2] or ''
-                        hrs = float(r[5] or 0)
-                        writer.writerow([month_key, date, act, f"{hrs:.2f}"])
-                        month_total += hrs
-
-                    writer.writerow([month_key, '', 'Monatssumme', f"{month_total:.2f}"])
-                    writer.writerow([])
-                    grand_total += month_total
-
-                writer.writerow(['', '', 'Gesamtstunden', f"{grand_total:.2f}"])
-
-            self.show_file_viewer(temp_path, selected_customer, mime_type='text/csv', auto_share=auto_share)
-
-        except Exception as e:
-            import traceback
-            error_msg = f"Fehler beim CSV-Export:\n{str(e)}\n\n{traceback.format_exc()}"
-            self.show_error('CSV-Fehler', error_msg)
-            self.write_error_log(error_msg)
-
-    def get_saved_pdf_path(self):
-        """Retrieve saved PDF export path from settings file"""
-        try:
-            settings_file = os.path.join(self.get_db_dir(), 'pdf_settings.txt')
-            if os.path.exists(settings_file):
-                with open(settings_file, 'r', encoding='utf-8') as f:
-                    path = f.read().strip()
-                    if path:
-                        # Support Android SAF content URIs as well as filesystem paths
-                        if path.startswith('content://'):
-                            self._pdf_export_path = path
-                            return path
-                        if os.path.exists(path):
-                            self._pdf_export_path = path
-                            return path
-        except Exception:
-            pass
-        return None
-
-    def open_export_settings(self):
-        """Popup to select and save export directory (one-time setting)."""
-        from kivy.uix.popup import Popup
-        from kivy.uix.label import Label
-        from kivy.uix.button import Button
-        from kivy.uix.textinput import TextInput
-        from kivy.uix.boxlayout import BoxLayout
-
-        current = self.get_saved_pdf_path() or self._pdf_export_path or ''
-
-        root = BoxLayout(orientation='vertical', spacing=8, padding=10)
-        root.add_widget(Label(text='Speicherort für Export', size_hint_y=None, height='30dp'))
-        path_input = TextInput(text=current, multiline=False, size_hint_y=None, height='40dp',
-                               background_normal='', background_color=(0.35, 0.35, 0.35, 1),
-                               foreground_color=(0.9, 0.9, 0.9, 1))
-        root.add_widget(path_input)
-
-        btns = BoxLayout(size_hint_y=None, height='44dp', spacing=8)
-        pick_btn = Button(text='Ordner wählen', background_normal='', background_color=(0.4, 0.4, 0.4, 1), color=(1, 1, 1, 1))
-        save_btn = Button(text='Speichern', background_normal='', background_color=(0.3, 0.6, 0.4, 1), color=(1, 1, 1, 1))
-        cancel_btn = Button(text='Abbrechen', background_normal='', background_color=(0.6, 0.4, 0.4, 1), color=(1, 1, 1, 1))
-        btns.add_widget(pick_btn)
-        btns.add_widget(save_btn)
-        btns.add_widget(cancel_btn)
-        root.add_widget(btns)
-
-        popup = Popup(title='Export-Einstellungen', content=root, size_hint=(.9, .45))
-
-        def do_pick(*_):
-            # Desktop: use tkinter; Android: use SAF via choose_pdf_directory
-            try:
-                import tkinter as tk
-                from tkinter import filedialog
-                print('[SETTINGS] Desktop directory picker opened')
-                win = tk.Tk(); win.withdraw(); win.attributes('-topmost', True)
-                d = filedialog.askdirectory(title='Speicherort auswählen')
-                win.destroy()
-                if d:
-                    path_input.text = d
-            except ImportError:
-                print('[SETTINGS] Android directory picker opened (SAF)')
-                try:
-                    self.choose_pdf_directory(lambda p: self.on_directory_chosen(p, popup=popup, update_input=path_input))
-                except Exception as e:
-                    print(f'[SETTINGS] Directory picker failed: {e}')
-
-        def do_save(*_):
-            p = path_input.text.strip()
-            if p:
-                self.save_pdf_path(p)
-            popup.dismiss()
-
-        pick_btn.bind(on_release=do_pick)
-        save_btn.bind(on_release=do_save)
-        cancel_btn.bind(on_release=lambda *_: popup.dismiss())
-        popup.open()
-
-    def on_directory_chosen(self, path, popup=None, update_input=None):
-        """Callback when a directory was chosen via SAF; saves and shows confirmation."""
-        try:
-            if path:
-                self.save_pdf_path(path)
-                if update_input is not None:
-                    update_input.text = path
-                from kivy.uix.popup import Popup
-                from kivy.uix.label import Label
-                p = Popup(title='Gespeichert', content=Label(text='Speicherort gespeichert'), size_hint=(.6, .3))
-                p.open()
-        finally:
-            if popup:
-                try:
-                    popup.dismiss()
-                except Exception:
-                    pass
-
-    def save_pdf_path(self, path):
-        """Save PDF export path to settings file"""
-        try:
-            settings_file = os.path.join(self.get_db_dir(), 'pdf_settings.txt')
-            with open(settings_file, 'w', encoding='utf-8') as f:
-                f.write(path)
-            self._pdf_export_path = path
-        except Exception as e:
-            print(f"Error saving PDF path: {e}")
-
-    def choose_pdf_directory(self, callback):
-        """Open Samsung file picker to choose PDF export directory, prioritizing OneDrive"""
-        try:
-            from jnius import autoclass, cast
-            Intent = autoclass('android.content.Intent')
-            Uri = autoclass('android.net.Uri')
-            DocumentsContract = autoclass('android.provider.DocumentsContract')
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            
-            # Create OPEN_DOCUMENT_TREE intent for directory selection
-            intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
-            
-            # Try to set OneDrive as initial location (Samsung Devices)
-            try:
-                # OneDrive URI for Samsung devices
-                onedrive_uri = Uri.parse("content://com.microsoft.skydrive.content.StorageAccessProvider/")
-                intent.putExtra("android.provider.extra.INITIAL_URI", onedrive_uri)
-            except Exception:
-                pass  # If OneDrive not available, use default picker
-            
-            # Set flags for persistent access
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | 
-                          Intent.FLAG_GRANT_WRITE_URI_PERMISSION |
-                          Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION |
-                          Intent.FLAG_GRANT_PREFIX_URI_PERMISSION)
-            
-            # Store callback for result handling
-            self._directory_callback = callback
-            
-            # Start activity for result
-            PythonActivity.mActivity.startActivityForResult(intent, 42)
-            
-            # Note: Activity result handling done via activity lifecycle, not binding here
-            
-        except Exception as e:
-            import traceback
-            error_msg = f"Fehler beim Öffnen des Dateiauswahldialogs:\n{str(e)}\n\n{traceback.format_exc()}"
-            print(error_msg)
-            # Fallback to default directory
-            try:
-                callback(self.get_documents_dir())
-            except Exception:
-                pass
-
-    def _on_directory_result(self, request_code, result_code, intent):
-        """Handle directory selection result"""
-        try:
-            if request_code == 42 and result_code == -1:  # RESULT_OK = -1
-                from jnius import autoclass
-                Intent = autoclass('android.content.Intent')
-                Uri = autoclass('android.net.Uri')
-                DocumentsContract = autoclass('android.provider.DocumentsContract')
-                PythonActivity = autoclass('org.kivy.android.PythonActivity')
-
-                if intent is not None:
-                    tree_uri = intent.getData()
-
-                    # Take persistable URI permission
-                    content_resolver = PythonActivity.mActivity.getContentResolver()
-                    content_resolver.takePersistableUriPermission(
-                        tree_uri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                    )
-
-                    # Convert URI to string
-                    uri_string = tree_uri.toString()
-
-                    # Save this path for future use
-                    self.save_pdf_path(uri_string)
-
-                    # Call the callback
-                    if hasattr(self, '_directory_callback'):
-                        self._directory_callback(uri_string)
-
-        except Exception as e:
-            import traceback
-            print(f"Directory result error: {str(e)}\n{traceback.format_exc()}")
-            # Fallback to default
-            if hasattr(self, '_directory_callback'):
-                self._directory_callback(self.get_documents_dir())
-
-    def get_onedrive_dir(self):
-        """Try to get OneDrive Documents folder if OneDrive is installed on Android"""
-        try:
-            # Possible OneDrive sync locations on Android
-            possible_paths = [
-                "/storage/emulated/0/Documents/Microsoft OneDrive",
-                "/sdcard/Documents/Microsoft OneDrive", 
-                "/storage/emulated/0/Microsoft OneDrive",
-                "/sdcard/Microsoft OneDrive",
-                os.path.expanduser("~/OneDrive"),  # Desktop fallback
-            ]
-            
-            for path in possible_paths:
-                if os.path.exists(path) and os.path.isdir(path):
-                    print(f"[ONEDRIVE] Found OneDrive folder: {path}")
-                    # Create Zeiterfassung subfolder if needed
-                    ze_path = os.path.join(path, "Zeiterfassung")
-                    if not os.path.exists(ze_path):
-                        os.makedirs(ze_path, exist_ok=True)
-                        print(f"[ONEDRIVE] Created Zeiterfassung subfolder: {ze_path}")
-                    return ze_path
-            
-            print("[ONEDRIVE] OneDrive folder not found, will use Documents instead")
-            return None
-            
-        except Exception as e:
-            print(f"[ONEDRIVE] Error checking for OneDrive: {e}")
-            return None
-
-    def export_pdf_with_dialog(self):
-        """Export PDF to OneDrive if available, otherwise to Documents folder"""
-        print("\n" + "="*60)
-        print("[EXPORT] ========== PDF EXPORT STARTED ==========")
-        print("="*60)
+        self.elapsed_time = '00:00:00'
+        self.time_label.text = self.elapsed_time
+        self.activity_input.text = ''
         
-        try:
-            selected_customer = self.ids.customer_spinner.text
-            print(f"[EXPORT] Selected customer: '{selected_customer}'")
+        self.start_btn.disabled = False
+        self.start_btn.text = '▶ Start'
+        self.pause_btn.disabled = True
+        self.stop_btn.disabled = True
+        
+        self.refresh_entries()
+        self.show_message('Erfolg', f'{duration_hours:.2f} Stunden gespeichert!')
+    
+    def add_manual_entry(self):
+        """Manuellen Eintrag hinzufügen"""
+        if not self.selected_customer_id:
+            self.show_message('Fehler', 'Bitte zuerst Kunden auswählen!')
+            return
+        
+        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        content.add_widget(Label(text='Stunden manuell nachtragen', size_hint_y=None, height=30, bold=True))
+        
+        content.add_widget(Label(text='Datum (YYYY-MM-DD):', size_hint_y=None, height=30))
+        date_input = TextInput(text=datetime.now().strftime('%Y-%m-%d'), multiline=False, size_hint_y=None, height=50)
+        content.add_widget(date_input)
+        
+        content.add_widget(Label(text='Tätigkeit:', size_hint_y=None, height=30))
+        activity_input = TextInput(multiline=False, size_hint_y=None, height=50, hint_text='z.B. Mais dreschen')
+        content.add_widget(activity_input)
+        
+        content.add_widget(Label(text='Stunden (z.B. 2.5):', size_hint_y=None, height=30))
+        hours_input = TextInput(multiline=False, size_hint_y=None, height=50, input_filter='float', hint_text='Wird auf 0.25 h aufgerundet')
+        content.add_widget(hours_input)
+        
+        content.add_widget(Label(text='Kommentar:', size_hint_y=None, height=30))
+        comment_input = TextInput(multiline=False, size_hint_y=None, height=50, hint_text='Optional')
+        content.add_widget(comment_input)
+        
+        btn_box = BoxLayout(size_hint_y=None, height=50, spacing=10)
+        save_btn = Button(text='Speichern', background_color=(0.2, 0.7, 0.2, 1))
+        cancel_btn = Button(text='Abbrechen', background_color=(0.7, 0.2, 0.2, 1))
+        
+        popup = Popup(title='Manueller Eintrag', content=content, size_hint=(0.9, 0.8))
+        
+        def save_manual(instance):
+            date_str = date_input.text.strip()
+            activity = activity_input.text.strip()
+            comment = comment_input.text.strip()
             
-            if not selected_customer or selected_customer == '—':
-                print("[EXPORT] ❌ FEHLER: Kein Kunde ausgewählt")
-                self.show_error('Fehler', 'Bitte Kunde auswählen')
+            try:
+                hours = float(hours_input.text.strip())
+            except:
+                hours_input.hint_text = 'Ungültige Zahl!'
                 return
             
-            # Create filename
-            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-            default_filename = f"Zeiterfassung_{selected_customer.replace(' ', '_')}_{timestamp}.pdf"
-            print(f"[EXPORT] Filename: {default_filename}")
+            if not activity:
+                activity_input.hint_text = 'Bitte Tätigkeit eingeben!'
+                return
             
-            # Try saved path first, then OneDrive, then fallback to Documents
-            export_dir = self.get_saved_pdf_path()
-            if not export_dir:
-                export_dir = self.get_onedrive_dir()
-            if not export_dir:
-                export_dir = self.get_documents_dir()
+            # Runde auf 0.25 h auf
+            hours = self.round_to_quarter_hour(hours)
             
-            print(f"[EXPORT] Initial export dir: {export_dir}")
-            
-            # On desktop, ask where to save
+            # Erstelle Start- und Endzeit
             try:
-                import tkinter as tk
-                from tkinter import filedialog
+                start_dt = datetime.strptime(f'{date_str} 08:00', '%Y-%m-%d %H:%M')
+                end_dt = start_dt + datetime.timedelta(hours=hours)
                 
-                print("[EXPORT] Running on DESKTOP (tkinter available)")
-                print(f"[EXPORT] Opening file dialog with initial dir: {export_dir}")
+                start_str = start_dt.strftime('%Y-%m-%d %H:%M:%S')
+                end_str = end_dt.strftime('%Y-%m-%d %H:%M:%S')
                 
-                root = tk.Tk()
-                root.withdraw()
-                root.attributes('-topmost', True)
-                
-                filepath = filedialog.asksaveasfilename(
-                    title="PDF speichern",
-                    defaultextension=".pdf",
-                    filetypes=[("PDF Dateien", "*.pdf"), ("Alle Dateien", "*.*")],
-                    initialfile=default_filename,
-                    initialdir=export_dir
+                db.add_entry(
+                    self.get_db_path(),
+                    self.selected_customer_id,
+                    activity,
+                    start_str,
+                    end_str,
+                    hours,
+                    comment
                 )
                 
-                root.destroy()
+                popup.dismiss()
+                self.refresh_entries()
+                self.show_message('Erfolg', f'{hours:.2f} Stunden nachgetragen!')
                 
-                if filepath:
-                    print(f"[EXPORT] Selected: {filepath}")
-                    export_dir = os.path.dirname(filepath)
-                    filename = os.path.basename(filepath)
-                    print(f"[EXPORT] → Dir: {export_dir}")
-                    print(f"[EXPORT] → File: {filename}")
-                    
-                    # Validate directory before calling export
-                    if not os.path.exists(export_dir):
-                        print(f"[EXPORT] Creating directory: {export_dir}")
-                        try:
-                            os.makedirs(export_dir, exist_ok=True)
-                            print(f"[EXPORT] ✅ Directory created")
-                        except Exception as e:
-                            print(f"[EXPORT] ❌ Could not create directory: {e}")
-                            self.show_error('Fehler', f'Verzeichnis konnte nicht erstellt werden:\n{e}')
-                            return
-                    
-                    # Save the path for future use
-                    self.save_pdf_path(export_dir)
-                    print(f"[EXPORT] Saved export path for future use")
-                    
-                    self.export_csv_to_path(export_dir, filename)
-                else:
-                    print("[EXPORT] ⚠️  Export cancelled by user")
-                    
-            except ImportError:
-                print("[EXPORT] Running on ANDROID (no tkinter)")
-                # Android: Use public /sdcard/Documents instead of app-internal
-                # This allows user to find files in standard location
-                export_dir = "/sdcard/Documents/Zeiterfassung"
-                print(f"[EXPORT] Using public Documents folder: {export_dir}")
-                
-                # Ensure directory exists
-                try:
-                    os.makedirs(export_dir, exist_ok=True)
-                    print(f"[EXPORT] ✅ Directory ready")
-                except Exception as e:
-                    print(f"[EXPORT] Warning: Could not create dir: {e}")
-                
-                # Save for future use
-                self.save_pdf_path(export_dir)
-                self.export_csv_to_path(export_dir, default_filename)
-                
-        except Exception as e:
-            import traceback
-            error_msg = f"Fehler beim PDF-Export:\n{str(e)}\n\n{traceback.format_exc()}"
-            print(f"[EXPORT] ❌ EXCEPTION: {error_msg}")
-            self.show_error('Export-Fehler', error_msg)
-
-    def write_pdf_to_uri(self, uri_string, pdf_bytes, filename):
-        """Write PDF bytes to Android content URI (for OneDrive, etc.)"""
-        try:
-            from jnius import autoclass
-            Uri = autoclass('android.net.Uri')
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            DocumentFile = autoclass('androidx.documentfile.provider.DocumentFile')
-            
-            tree_uri = Uri.parse(uri_string)
-            context = PythonActivity.mActivity
-            content_resolver = context.getContentResolver()
-            
-            # Get DocumentFile from tree URI
-            doc_tree = DocumentFile.fromTreeUri(context, tree_uri)
-            
-            if doc_tree and doc_tree.canWrite():
-                # Create new PDF file in the directory
-                new_file = doc_tree.createFile('application/pdf', filename)
-                
-                if new_file:
-                    # Write PDF bytes to the file
-                    output_stream = content_resolver.openOutputStream(new_file.getUri())
-                    
-                    # Convert Python bytes to Java byte array
-                    if isinstance(pdf_bytes, bytes):
-                        output_stream.write(pdf_bytes)
-                    else:
-                        # If it's a string, encode it
-                        output_stream.write(pdf_bytes.encode('latin-1'))
-                    
-                    output_stream.flush()
-                    output_stream.close()
-                    
-                    # Return the document URI as string
-                    return new_file.getUri().toString()
-                else:
-                    raise Exception("Konnte Datei nicht erstellen")
-            else:
-                raise Exception("Kein Schreibzugriff auf ausgewählten Ordner")
-            
-        except Exception as e:
-            import traceback
-            print(f"Write to URI error: {str(e)}\n{traceback.format_exc()}")
-            raise
+            except ValueError:
+                date_input.hint_text = 'Ungültiges Datum-Format!'
         
-        return None
-
-    def export_csv_to_path(self, export_path, filename=None):
-        """Export customer entries as PDF (with automatic CSV generation)"""
-        print(f"\n[EXPORT] ===== EXPORT_CSV_TO_PATH CALLED =====")
-        print(f"[EXPORT] Export path: '{export_path}'")
-        print(f"[EXPORT] Filename: '{filename}'")
+        save_btn.bind(on_release=save_manual)
+        cancel_btn.bind(on_release=popup.dismiss)
         
-        # Validate export path
-        if not export_path or not isinstance(export_path, str):
-            print(f"[EXPORT] ❌ Invalid export path: {export_path}")
-            self.show_error('Fehler', 'Ungültiger Speicherort')
-            return
+        btn_box.add_widget(save_btn)
+        btn_box.add_widget(cancel_btn)
+        content.add_widget(btn_box)
         
-        # Normalize path
-        export_path = os.path.normpath(export_path)
-        print(f"[EXPORT] Normalized path: {export_path}")
-        
-        # Ensure directory exists
-        if not os.path.exists(export_path):
-            print(f"[EXPORT] Creating directory: {export_path}")
-            try:
-                os.makedirs(export_path, exist_ok=True)
-                print(f"[EXPORT] ✅ Directory created")
-            except Exception as e:
-                print(f"[EXPORT] ❌ Could not create directory: {e}")
-                self.show_error('Fehler', f'Verzeichnis konnte nicht erstellt werden:\n{e}')
-                return
-        
-        # Verify directory is writable
-        if not os.access(export_path, os.W_OK):
-            print(f"[EXPORT] ❌ No write permission to directory: {export_path}")
-            self.show_error('Fehler', f'Keine Schreibberechtigung im Verzeichnis:\n{export_path}')
-            return
-        
-        selected_customer = self.ids.customer_spinner.text
-        if not selected_customer or selected_customer == '—':
-            print(f"[EXPORT] ❌ No customer selected")
-            self.show_error('Fehler', 'Bitte Kunde auswählen')
-            return
-
-        print(f"[EXPORT] Customer: '{selected_customer}'")
-
-        rows = db.get_entries(self.get_db_path(), selected_customer)
-        print(f"[EXPORT] Found {len(rows)} entries in database")
-        
-        if not rows:
-            print(f"[EXPORT] ❌ No entries found for customer")
-            self.show_error('Info', 'Keine Einträge vorhanden')
-            return
-
-        try:
-            import csv
-            from collections import defaultdict
-
-            if filename is None:
-                filename = f"Zeiterfassung_{selected_customer.replace(' ', '_')}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-                print(f"[EXPORT] Auto-generated filename: {filename}")
-            
-            # Sanitize filename - remove invalid characters
-            invalid_chars = '<>:"|?*\\'
-            for char in invalid_chars:
-                filename = filename.replace(char, '_')
-            print(f"[EXPORT] Sanitized filename: {filename}")
-            
-            # Use PDF filename (we'll generate PDF, not CSV)
-            if not filename.endswith('.pdf'):
-                filename = filename.replace('.csv', '.pdf')
-                print(f"[EXPORT] Converted filename to PDF: {filename}")
-            
-            pdf_path = os.path.join(export_path, filename)
-            csv_path = pdf_path.replace('.pdf', '.csv')
-            
-            print(f"[EXPORT] Full PDF path: {pdf_path}")
-            print(f"[EXPORT] Full CSV path: {csv_path}")
-            
-            # Verify paths are on allowed locations
-            print(f"[EXPORT] ✅ Paths validated")
-
-            # Group entries by month
-            print(f"[EXPORT] Processing {len(rows)} entries...")
-            months_data = defaultdict(list)
-            for r in rows:
-                date_str = (r[3] or '')[:10]
-                month_key = date_str[:7] if date_str else "Undatiert"
-                months_data[month_key].append(r)
-
-            sorted_months = sorted(months_data.keys(), reverse=True)
-            grand_total = 0.0
-            
-            print(f"[EXPORT] Found {len(months_data)} months: {sorted_months}")
-
-            # Write CSV file (for backup)
-            print(f"[EXPORT] Writing CSV file...")
-            try:
-                with open(csv_path, 'w', newline='', encoding='utf-8') as f:
-                    writer = csv.writer(f, delimiter=';')
-                    
-                    # Header
-                    writer.writerow(['Zeiterfassung', selected_customer])
-                    writer.writerow([])
-                    writer.writerow([f'Erstellt am: {datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}'])
-                    
-                    cust = db.get_customer(self.get_db_path(), selected_customer)
-                    if cust and len(cust) > 2 and cust[2]:
-                        writer.writerow([f'Adresse: {cust[2]}'])
-                    if cust and len(cust) > 3 and cust[3]:
-                        writer.writerow([f'Email: {cust[3]}'])
-                    if cust and len(cust) > 4 and cust[4]:
-                        writer.writerow([f'Telefon: {cust[4]}'])
-                    
-                    writer.writerow([])
-                    writer.writerow(['Datum', 'Taetigkeit', 'Stunden'])
-
-                    # Monthly entries
-                    for month_key in sorted_months:
-                        rows_in_month = months_data[month_key]
-                        month_total = 0.0
-
-                        writer.writerow([f'Monat: {month_key}'])
-                        for r in rows_in_month:
-                            date = (r[3] or '')[:10]
-                            act = r[2] or ''
-                            hrs = float(r[5] or 0)
-                            writer.writerow([date, act, f'{hrs:.2f}'])
-                            month_total += hrs
-
-                        writer.writerow(['', f'Monatssumme {month_key}:', f'{month_total:.2f}'])
-                        writer.writerow([])
-                        grand_total += month_total
-
-                    # Grand total
-                    writer.writerow([])
-                    writer.writerow(['Gesamtstunden', f'{grand_total:.2f}'])
-                
-                print(f"[EXPORT] ✅ CSV file written successfully")
-                print(f"[EXPORT] CSV location: {csv_path}")
-                print(f"[EXPORT] Total hours: {grand_total:.2f}")
-            except Exception as e:
-                print(f"[EXPORT] ❌ Error writing CSV: {e}")
-                raise
-
-            # Automatische PDF-Konvertierung
-            print(f"\n[EXPORT] Starting PDF conversion...")
-            try:
-                pdf_path = self.convert_csv_to_pdf(csv_path, selected_customer, rows, months_data, sorted_months, grand_total)
-                
-                if pdf_path and os.path.exists(pdf_path):
-                    file_size = os.path.getsize(pdf_path)
-                    print(f"[EXPORT] ✅ PDF successfully created!")
-                    print(f"[EXPORT] Location: {pdf_path}")
-                    print(f"[EXPORT] Size: {file_size} bytes")
-                    self.show_success_and_open_pdf(pdf_path, selected_customer, is_uri=False)
-                else:
-                    print(f"[EXPORT] ⚠️  PDF path returned but file doesn't exist: {pdf_path}")
-                    print(f"[EXPORT] Using CSV instead")
-                    self.show_error('Export-Info', f'PDF konnte nicht erstellt werden.\nCSV-Datei wird stattdessen angezeigt:\n\n{os.path.basename(csv_path)}')
-                    self.show_success_and_open_pdf(csv_path, selected_customer, is_uri=False)
-            except Exception as pdf_err:
-                print(f"[EXPORT] ⚠️  PDF conversion exception: {pdf_err}")
-                import traceback
-                print(f"[EXPORT] Traceback: {traceback.format_exc()}")
-                print(f"[EXPORT] Using CSV instead")
-                self.show_error('Export-Info', f'PDF konnte nicht erstellt werden.\nCSV-Datei wird stattdessen angezeigt:\n\n{os.path.basename(csv_path)}')
-                self.show_success_and_open_pdf(csv_path, selected_customer, is_uri=False)
-
-        except Exception as e:
-            import traceback
-            error_msg = f"Fehler beim Export:\n{str(e)}\n\n{traceback.format_exc()}"
-            print(f"[EXPORT] ❌ EXCEPTION: {error_msg}")
-            self.show_error('Export-Fehler', error_msg)
-            self.write_error_log(error_msg)
-        
-        print("[EXPORT] ===== EXPORT COMPLETE =====\n")
-
-    def convert_csv_to_pdf(self, csv_path, customer_name, rows, months_data, sorted_months, grand_total):
-        """Convert CSV to PDF using reportlab - SIMPLIFIED VERSION"""
-        print(f"\n[PDF] ===== CONVERT_CSV_TO_PDF STARTED =====")
-        try:
-            print(f"[PDF] Importing reportlab...")
-            from reportlab.lib.pagesizes import A4
-            from reportlab.lib.units import cm
-            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-            from reportlab.lib import colors
-            from reportlab.lib.enums import TA_CENTER, TA_RIGHT
-            
-            pdf_path = csv_path.replace('.csv', '.pdf')
-            print(f"[PDF] PDF path: {pdf_path}")
-            print(f"[PDF] Creating PDF with {len(sorted_months)} months, {len(rows)} entries")
-            
-            # Create PDF directory if needed
-            pdf_dir = os.path.dirname(pdf_path)
-            if pdf_dir and not os.path.exists(pdf_dir):
-                print(f"[PDF] Creating directory: {pdf_dir}")
-                os.makedirs(pdf_dir, exist_ok=True)
-            
-            print(f"[PDF] Opening SimpleDocTemplate...")
-            # Create PDF document
-            doc = SimpleDocTemplate(pdf_path, pagesize=A4, 
-                                   rightMargin=0.8*cm, leftMargin=0.8*cm,
-                                   topMargin=1*cm, bottomMargin=1*cm)
-            
-            story = []
-            styles = getSampleStyleSheet()
-            
-            print(f"[PDF] Creating styles...")
-            # Simple styles
-            title_style = ParagraphStyle(
-                'Title',
-                parent=styles['Normal'],
-                fontSize=14,
-                textColor=colors.black,
-                alignment=TA_CENTER,
-                spaceAfter=10
-            )
-            
-            print(f"[PDF] Adding title...")
-            # Title - ohne HTML tags
-            title_text = f"Zeiterfassung - {customer_name}"
-            story.append(Paragraph(title_text, title_style))
-            story.append(Spacer(1, 0.2*cm))
-            
-            # Created date
-            story.append(Paragraph(f"Erstellt: {datetime.datetime.now().strftime('%d.%m.%Y %H:%M')}", styles['Normal']))
-            story.append(Spacer(1, 0.3*cm))
-            
-            # Monthly tables
-            print(f"[PDF] Creating tables for {len(sorted_months)} months...")
-            for month_key in sorted_months:
-                print(f"[PDF]   Month {month_key}...")
-                # Month heading ohne HTML tags
-                story.append(Paragraph(f"Monat: {month_key}", styles['Heading3']))
-                
-                rows_in_month = months_data[month_key]
-                month_total = 0.0
-                
-                # Build table data
-                table_data = [['Datum', 'Tätigkeit', 'Stunden']]
-                for r in rows_in_month:
-                    try:
-                        date = str(r[3] or '')[:10]
-                        act = str(r[2] or '')
-                        hrs = float(r[5] or 0)
-                        table_data.append([date, act, f'{hrs:.1f}'])
-                        month_total += hrs
-                    except Exception as row_err:
-                        print(f"[PDF]   ERROR in row: {row_err}")
-                
-                # Add month total - ohne HTML tags, Styling via TableStyle
-                table_data.append(['', 'Summe', f'{month_total:.1f}'])
-                
-                # Create and style table
-                table = Table(table_data, colWidths=[2.5*cm, 9*cm, 2.5*cm])
-                table.setStyle(TableStyle([
-                    ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                    ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
-                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                    ('FONTSIZE', (0, 0), (-1, 0), 9),
-                    ('BOTTOMPADDING', (0, 0), (-1, 0), 4),
-                    ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-                    ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-                    ('FONTSIZE', (0, 1), (-1, -1), 8),
-                    ('ALIGN', (2, 1), (2, -1), 'RIGHT'),
-                    # Style für die Summe-Zeile (letzte Zeile)
-                    ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e0e0e0')),
-                    ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
-                    ('FONTSIZE', (0, -1), (-1, -1), 9),
-                ]))
-                
-                story.append(table)
-                story.append(Spacer(1, 0.2*cm))
-            
-            # Grand total
-            print(f"[PDF] Adding grand total: {grand_total:.1f}...")
-            story.append(Spacer(1, 0.2*cm))
-            # Grand total - ohne HTML tags
-            grand_table_data = [['GESAMTSTUNDEN:', f'{grand_total:.1f}']]
-            grand_table = Table(grand_table_data, colWidths=[11*cm, 2.5*cm])
-            grand_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-                ('ALIGN', (0, 0), (-1, 0), 'LEFT'),
-                ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, 0), 10),
-                ('PADDING', (0, 0), (-1, 0), 6),
-            ]))
-            story.append(grand_table)
-            
-            print(f"[PDF] Building PDF document...")
-            # Build PDF
-            doc.build(story)
-            
-            # Verify file exists
-            if os.path.exists(pdf_path):
-                file_size = os.path.getsize(pdf_path)
-                print(f"[PDF] ✅ PDF created! Size: {file_size} bytes")
-                return pdf_path
-            else:
-                print(f"[PDF] ❌ PDF file not found after build()")
-                return None
-            
-        except Exception as e:
-            import traceback
-            print(f"[PDF] ❌ ERROR: {str(e)}")
-            print(f"[PDF] Type: {type(e).__name__}")
-            print(f"[PDF] Traceback:\n{traceback.format_exc()}")
-            return None
-
-    def convert_csv_to_pdf_bytes(self, customer_name, rows, months_data, sorted_months, grand_total):
-        """Build the PDF and return bytes (for SAF URI writes)."""
-        print(f"\n[PDF] ===== CONVERT_CSV_TO_PDF_BYTES STARTED =====")
-        try:
-            from reportlab.lib.pagesizes import A4
-            from reportlab.lib.units import cm
-            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-            from reportlab.lib import colors
-            from reportlab.lib.enums import TA_CENTER
-            import io
-
-            buffer = io.BytesIO()
-            doc = SimpleDocTemplate(buffer, pagesize=A4,
-                                    rightMargin=0.8*cm, leftMargin=0.8*cm,
-                                    topMargin=1*cm, bottomMargin=1*cm)
-            story = []
-            styles = getSampleStyleSheet()
-            title_style = ParagraphStyle('Title', parent=styles['Normal'], fontSize=14, textColor=colors.black, alignment=TA_CENTER, spaceAfter=10)
-            story.append(Paragraph(f"Zeiterfassung - {customer_name}", title_style))
-            story.append(Spacer(1, 0.2*cm))
-            story.append(Paragraph(f"Erstellt: {datetime.datetime.now().strftime('%d.%m.%Y %H:%M')}", styles['Normal']))
-            story.append(Spacer(1, 0.3*cm))
-
-            for month_key in sorted_months:
-                story.append(Paragraph(f"Monat: {month_key}", styles['Heading3']))
-                rows_in_month = months_data[month_key]
-                month_total = 0.0
-                table_data = [['Datum', 'Tätigkeit', 'Stunden']]
-                for r in rows_in_month:
-                    date = str(r[3] or '')[:10]
-                    act = str(r[2] or '')
-                    hrs = float(r[5] or 0)
-                    table_data.append([date, act, f'{hrs:.1f}'])
-                    month_total += hrs
-                table_data.append(['', 'Summe', f'{month_total:.1f}'])
-                table = Table(table_data, colWidths=[2.5*cm, 9*cm, 2.5*cm])
-                table.setStyle(TableStyle([
-                    ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                    ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
-                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                    ('FONTSIZE', (0, 0), (-1, 0), 9),
-                    ('BOTTOMPADDING', (0, 0), (-1, 0), 4),
-                    ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-                    ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-                    ('FONTSIZE', (0, 1), (-1, -1), 8),
-                    ('ALIGN', (2, 1), (2, -1), 'RIGHT'),
-                    ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e0e0e0')),
-                    ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
-                    ('FONTSIZE', (0, -1), (-1, -1), 9),
-                ]))
-                story.append(table)
-                story.append(Spacer(1, 0.2*cm))
-
-            grand_table_data = [['GESAMTSTUNDEN:', f'{grand_total:.1f}']]
-            from reportlab.platypus import Table
-            grand_table = Table(grand_table_data, colWidths=[11*cm, 2.5*cm])
-            grand_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-                ('ALIGN', (0, 0), (-1, 0), 'LEFT'),
-                ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, 0), 10),
-                ('PADDING', (0, 0), (-1, 0), 6),
-            ]))
-            story.append(grand_table)
-
-            doc.build(story)
-            pdf_bytes = buffer.getvalue()
-            print(f"[PDF] ✅ Bytes generated: {len(pdf_bytes)}")
-            return pdf_bytes
-        except Exception as e:
-            print(f"[PDF] ❌ ERROR (bytes): {e}\n{traceback.format_exc()}")
-            return None
-
-    def show_success_and_open_pdf(self, filepath, customer_name, is_uri=False):
-        """Show success message and automatically open PDF"""
-        try:
-            # Track last export for printing/share
-            self._last_export_path = filepath
-            self._last_export_is_uri = bool(is_uri)
-            # Automatically open the PDF
-            self.open_pdf_file(filepath, is_uri=is_uri)
-            
-            # Show success toast/notification
-            from kivy.uix.popup import Popup
-            from kivy.uix.label import Label
-            from kivy.uix.button import Button
-            
-            # Check if it's PDF or CSV
-            file_type = 'PDF' if filepath.endswith('.pdf') else 'CSV'
-            
-            content = BoxLayout(orientation='vertical', spacing=10, padding=15)
-            content.add_widget(Label(
-                text=f'{file_type} erfolgreich erstellt!',
-                size_hint_y=None,
-                height='50dp',
-                font_size='18sp',
-                bold=True,
-                color=(0.4, 0.7, 0.5, 1)
-            ))
-            content.add_widget(Label(
-                text=f'Kunde: {customer_name}',
-                size_hint_y=None,
-                height='30dp',
-                font_size='14sp'
-            ))
-            content.add_widget(Label(
-                text=f'{file_type} wird jetzt geöffnet...',
-                size_hint_y=None,
-                height='30dp',
-                font_size='14sp',
-                color=(0.5, 0.5, 0.5, 1)
-            ))
-            
-            btn = Button(
-                text='OK',
-                size_hint_y=None,
-                height='50dp',
-                background_normal='',
-                background_color=(0.4, 0.6, 0.8, 1),
-                color=(1, 1, 1, 1),
-                font_size='16sp',
-                bold=True
-            )
-            content.add_widget(btn)
-            
-            popup = Popup(
-                title=f'{file_type} Export',
-                content=content,
-                size_hint=(.85, .5),
-                pos_hint={'center_x': 0.5, 'center_y': 0.5},
-                auto_dismiss=True
-            )
-            btn.bind(on_release=popup.dismiss)
-            popup.open()
-            
-        except Exception as e:
-            import traceback
-            print(f"Show success error: {str(e)}\n{traceback.format_exc()}")
-
-    def open_pdf_file(self, filepath, is_uri=False):
-        """Open report with default viewer"""
-        try:
-            # Try Android first
-            from jnius import autoclass, cast
-            Intent = autoclass('android.content.Intent')
-            Uri = autoclass('android.net.Uri')
-            File = autoclass('java.io.File')
-            String = autoclass('java.lang.String')
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-
-            if is_uri:
-                uri = Uri.parse(filepath)
-                mime_type = 'application/pdf'
-            else:
-                java_file = File(filepath)
-                try:
-                    FileProvider = autoclass('androidx.core.content.FileProvider')
-                    authority = self.get_fileprovider_authority()
-                    uri = FileProvider.getUriForFile(PythonActivity.mActivity, authority, java_file)
-                except Exception as fp_error:
-                    print(f"FileProvider failed: {fp_error}")
-                    uri = Uri.fromFile(java_file)
-                # Determine MIME by extension
-                mime_type = 'application/pdf' if str(filepath).lower().endswith('.pdf') else 'text/csv'
-
-            intent = Intent(Intent.ACTION_VIEW)
-            intent.setDataAndType(uri, mime_type)
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-
-            try:
-                title = cast('java.lang.CharSequence', String('Öffnen mit'))
-                chooser = Intent.createChooser(intent, title)
-                PythonActivity.mActivity.startActivity(chooser)
-            except Exception:
-                PythonActivity.mActivity.startActivity(intent)
-            
-        except ImportError:
-            # Desktop fallback - open file with default application
-            import subprocess
-            try:
-                if filepath.endswith('.pdf'):
-                    # Open PDF with default viewer
-                    subprocess.Popen(['start', filepath], shell=True)
-                else:
-                    subprocess.Popen(['start', filepath], shell=True)
-                print(f"[DESKTOP] Opened: {filepath}")
-            except Exception as e:
-                print(f"[DESKTOP] Could not open file: {e}")
-        except Exception as e:
-            import traceback
-            error_msg = f"Fehler beim Öffnen der Datei:\n{str(e)}\n\n{traceback.format_exc()}"
-            print(error_msg)
-            self.write_error_log(error_msg)
-
-    def print_last_export(self):
-        """Open Android share sheet for PDF printing (last exported file)."""
-        try:
-            if not self._last_export_path:
-                self.show_error('Drucken', 'Kein exportiertes Dokument vorhanden.')
-                return
-            # Require PDF for printing
-            is_pdf = self._last_export_is_uri or str(self._last_export_path).lower().endswith('.pdf')
-            if not is_pdf:
-                self.show_error('Drucken', 'Letzte Datei ist kein PDF. Bitte zuerst PDF exportieren.')
-                return
-            ok = self.share_file_fileprovider(self._last_export_path, mime_type='application/pdf', is_uri=self._last_export_is_uri)
-            if not ok:
-                self.show_error('Drucken', 'Druck-Freigabe fehlgeschlagen.')
-        except Exception as e:
-            import traceback
-            error_msg = f"Fehler beim Drucken:\n{str(e)}\n\n{traceback.format_exc()}"
-            print(error_msg)
-            self.write_error_log(error_msg)
-
-    def export_pdf(self, auto_share=False):
-        """Legacy PDF export function - redirects to new dialog-based export"""
-        self.export_pdf_with_dialog()
-
-    def refresh_entries(self):
-        # ensure UI has been built and ids available
-        if 'customer_spinner' not in self.ids or 'entries_box' not in self.ids:
-            return
-        customer = self.ids.customer_spinner.text
-        path = self.get_db_path()
-        box = self.ids.entries_box
-        # clear existing
-        box.clear_widgets()
-        if not customer or customer == '—':
-            return
-        rows = db.get_entries(path, customer)
-        from kivy.uix.button import Button
-        from kivy.uix.label import Label
-        for r in rows:
-            entry_id = r[0]
-            act = r[2] or ''
-            date = (r[3] or '')[:10]
-            hours = f"{r[5]:.2f}"
-            text = f"{act} — {date} — {hours} Std"
-            btn = Button(text=text, size_hint_y=None, height='40dp',
-                        background_normal='',
-                        background_color=(0.35, 0.35, 0.35, 1),
-                        color=(0.8, 0.8, 0.8, 1),
-                        font_size='13sp')
-            # bind popup with delete
-            btn.bind(on_release=lambda inst, eid=entry_id: self.open_entry_popup(eid))
-            box.add_widget(btn)
-
-    def open_entry_popup(self, entry_id):
-        info = None
-        for r in db.get_entries(self.get_db_path()):
-            if r[0] == entry_id:
-                info = r
-                break
-        if not info:
-            return
-        from kivy.uix.popup import Popup
-        from kivy.uix.label import Label
-        from kivy.uix.button import Button
-        from kivy.uix.textinput import TextInput
-        from kivy.uix.scrollview import ScrollView
-        
-        content = BoxLayout(orientation='vertical', spacing=8, padding=10)
-        content.canvas.before.clear()
-        
-        act = info[2] or ''
-        start = info[3] or ''
-        end = info[4] or ''
-        hours = f"{info[5]:.2f}"
-        notes = info[6] or ''
-        
-        # Dark mode labels
-        lbl_kwargs = {'size_hint_y': None, 'height': '30dp', 'color': (0.9, 0.9, 0.9, 1)}
-        content.add_widget(Label(text=f"Tätigkeit: {act}", **lbl_kwargs))
-        content.add_widget(Label(text=f"Start: {start}", **lbl_kwargs))
-        content.add_widget(Label(text=f"Ende: {end}", **lbl_kwargs))
-        content.add_widget(Label(text=f"Std: {hours}", **lbl_kwargs))
-        
-        content.add_widget(Label(text="Kommentar:", size_hint_y=None, height='25dp', color=(0.9, 0.9, 0.9, 1)))
-        notes_input = TextInput(text=notes, multiline=True, size_hint_y=0.4,
-                               background_normal='', background_color=(0.35, 0.35, 0.35, 1),
-                               foreground_color=(0.9, 0.9, 0.9, 1))
-        content.add_widget(notes_input)
-        
-        btns = BoxLayout(size_hint_y=None, height='40dp', spacing=4)
-        btn_kwargs = {'background_normal': '', 'color': (1, 1, 1, 1), 'font_size': '14sp'}
-        save_btn = Button(text='Speichern', background_color=(0.3, 0.6, 0.4, 1), **btn_kwargs)
-        del_btn = Button(text='Löschen', background_color=(0.7, 0.4, 0.4, 1), **btn_kwargs)
-        cancel_btn = Button(text='Abbrechen', background_color=(0.4, 0.4, 0.4, 1), **btn_kwargs)
-        btns.add_widget(save_btn)
-        btns.add_widget(del_btn)
-        btns.add_widget(cancel_btn)
-        content.add_widget(btns)
-        
-        popup = Popup(title='Eintrag bearbeiten', content=content, size_hint=(.95, .7))
-
-        def do_save(*a):
-            db.update_entry(self.get_db_path(), entry_id, notes_input.text)
-            popup.dismiss()
-            self.refresh_entries()
-
-        def do_delete(*a):
-            db.delete_entry(self.get_db_path(), entry_id)
-            popup.dismiss()
-            self.refresh_entries()
-
-        save_btn.bind(on_release=do_save)
-        del_btn.bind(on_release=do_delete)
-        cancel_btn.bind(on_release=lambda *a: popup.dismiss())
         popup.open()
-
-
-class PoCApp(App):
-    def build(self):
+    
+    def refresh_entries(self):
+        """Einträge-Liste aktualisieren"""
+        self.entries_list.clear_widgets()
+        
+        if not self.selected_customer_id:
+            return
+        
+        entries = db.get_entries_by_customer(self.get_db_path(), self.selected_customer_id)
+        
+        for entry in reversed(entries):  # Neueste zuerst
+            entry_id, activity, start, end, duration, comment = entry
+            
+            date_str = start.split()[0] if start else 'N/A'
+            
+            entry_box = BoxLayout(size_hint_y=None, height=60, spacing=5, padding=5)
+            
+            info_text = f'{date_str} | {activity} | {duration:.2f}h'
+            if comment:
+                info_text += f'\\n{comment}'
+            
+            entry_label = Label(text=info_text, halign='left', valign='middle', size_hint_x=0.8)
+            entry_label.bind(size=entry_label.setter('text_size'))
+            entry_box.add_widget(entry_label)
+            
+            del_btn = Button(text='🗑', size_hint_x=0.2, background_color=(0.7, 0.2, 0.2, 1))
+            del_btn.bind(on_release=lambda x, e_id=entry_id: self.delete_entry(e_id))
+            entry_box.add_widget(del_btn)
+            
+            self.entries_list.add_widget(entry_box)
+    
+    def delete_entry(self, entry_id):
+        """Eintrag löschen"""
+        db.delete_entry(self.get_db_path(), entry_id)
+        self.refresh_entries()
+    
+    def change_excel_path(self):
+        """Popup zum Ändern des Excel-Speicherpfads"""
+        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        
+        content.add_widget(Label(text='Aktueller Excel-Speicherpfad:', size_hint_y=None, height=30, bold=True))
+        current_path_label = Label(text=self.excel_export_path, size_hint_y=None, height=60, halign='left', valign='middle')
+        current_path_label.bind(size=current_path_label.setter('text_size'))
+        content.add_widget(current_path_label)
+        
+        content.add_widget(Label(text='Neuer Pfad:', size_hint_y=None, height=30))
+        path_input = TextInput(text=self.excel_export_path, multiline=False, size_hint_y=None, height=50)
+        content.add_widget(path_input)
+        
+        info_label = Label(
+            text='Beispiel: C:\\\\Users\\\\Bene\\\\Documents\\\\Zeiterfassung\\n\\nOder leer lassen für aktuelles Verzeichnis',
+            size_hint_y=None,
+            height=80,
+            halign='left',
+            valign='middle'
+        )
+        info_label.bind(size=info_label.setter('text_size'))
+        content.add_widget(info_label)
+        
+        btn_box = BoxLayout(size_hint_y=None, height=50, spacing=10)
+        save_btn = Button(text='Speichern', background_color=(0.2, 0.7, 0.2, 1))
+        cancel_btn = Button(text='Abbrechen', background_color=(0.7, 0.2, 0.2, 1))
+        
+        popup = Popup(title='Excel-Speicherpfad ändern', content=content, size_hint=(0.9, 0.6))
+        
+        def save_path(instance):
+            new_path = path_input.text.strip()
+            if not new_path:
+                new_path = os.path.dirname(__file__) if os.path.dirname(__file__) else os.getcwd()
+            
+            # Prüfe ob Pfad existiert oder erstelle ihn
+            try:
+                os.makedirs(new_path, exist_ok=True)
+                self.excel_export_path = new_path
+                popup.dismiss()
+                self.show_message('Erfolg', f'Excel-Pfad geändert:\\n{new_path}')
+            except Exception as e:
+                path_input.hint_text = f'Ungültiger Pfad: {str(e)}'
+        
+        save_btn.bind(on_release=save_path)
+        cancel_btn.bind(on_release=popup.dismiss)
+        
+        btn_box.add_widget(save_btn)
+        btn_box.add_widget(cancel_btn)
+        content.add_widget(btn_box)
+        
+        popup.open()
+    
+    def export_excel(self):
+        """Exportiere Excel-Report (NUR Stunden, KEIN Geld)"""
+        if not self.selected_customer_id:
+            self.show_message('Fehler', 'Bitte zuerst Kunden auswählen!')
+            return
+        
         try:
-            # Load the KV rules - this applies the <RootWidget>: rule
-            Builder.load_string(KV)
-            print("[APP] KV loaded successfully")
+            from openpyxl import Workbook
+            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
             
-            # Now create and return the actual RootWidget instance
-            root = RootWidget()
-            print("[APP] RootWidget created successfully")
-            return root
+            # Hole Daten
+            customer = db.get_customer_by_name(self.get_db_path(), self.selected_customer)
+            entries = db.get_entries_by_customer(self.get_db_path(), self.selected_customer_id)
+            
+            if not entries:
+                self.show_message('Fehler', 'Keine Einträge vorhanden!')
+                return
+            
+            # Erstelle Excel-Verzeichnis
+            if platform == 'android':
+                try:
+                    from android.storage import primary_external_storage_path
+                    excel_dir = os.path.join(primary_external_storage_path(), 'Documents')
+                except:
+                    excel_dir = App.get_running_app().user_data_dir
+            else:
+                excel_dir = self.excel_export_path
+            
+            os.makedirs(excel_dir, exist_ok=True)
+            
+            # Sichere Dateinamen-Erstellung
+            safe_name = self.selected_customer.replace(' ', '_').replace('/', '_')
+            filename = f'Zeiterfassung_{safe_name}_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx'
+            excel_path = os.path.join(excel_dir, filename)
+            
+            # Erstelle Workbook
+            wb = Workbook()
+            ws = wb.active
+            ws.title = 'Arbeitsreport'
+            
+            # Styling
+            header_font = Font(bold=True, size=16, color='FFFFFF')
+            header_fill = PatternFill(start_color='366092', end_color='366092', fill_type='solid')
+            table_header_font = Font(bold=True, size=12)
+            table_header_fill = PatternFill(start_color='B8CCE4', end_color='B8CCE4', fill_type='solid')
+            border = Border(
+                left=Side(style='thin'),
+                right=Side(style='thin'),
+                top=Side(style='thin'),
+                bottom=Side(style='thin')
+            )
+            
+            # Header-Bereich
+            ws.merge_cells('A1:D1')
+            ws['A1'] = f'Arbeitsreport: {self.selected_customer}'
+            ws['A1'].font = header_font
+            ws['A1'].fill = header_fill
+            ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
+            ws.row_dimensions[1].height = 25
+            
+            ws['A2'] = 'Erstellt:'
+            ws['B2'] = datetime.now().strftime('%d.%m.%Y %H:%M')
+            ws['A2'].font = Font(bold=True)
+            
+            # Tabellen-Header (Zeile 4)
+            row_start = 4
+            headers = ['Datum', 'Tätigkeit', 'Stunden', 'Kommentar']
+            for col, header in enumerate(headers, start=1):
+                cell = ws.cell(row=row_start, column=col, value=header)
+                cell.font = table_header_font
+                cell.fill = table_header_fill
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+                cell.border = border
+            
+            # Einträge
+            total_hours = 0.0
+            row_num = row_start + 1
+            
+            for entry in entries:
+                entry_id, activity, start, end, duration, comment = entry
+                total_hours += duration
+                
+                date_str = start.split()[0] if start else 'N/A'
+                
+                ws.cell(row=row_num, column=1, value=date_str).border = border
+                ws.cell(row=row_num, column=2, value=str(activity)).border = border
+                ws.cell(row=row_num, column=3, value=f'{duration:.2f}').border = border
+                ws.cell(row=row_num, column=4, value=str(comment or '')).border = border
+                
+                row_num += 1
+            
+            # Summen-Zeile
+            row_num += 1
+            ws.cell(row=row_num, column=1, value='GESAMT').font = Font(bold=True, size=12)
+            ws.cell(row=row_num, column=2, value='').border = border
+            ws.cell(row=row_num, column=3, value=f'{total_hours:.2f}').font = Font(bold=True, size=12)
+            ws.cell(row=row_num, column=3).border = border
+            ws.cell(row=row_num, column=4, value='').border = border
+            
+            # Spaltenbreiten
+            ws.column_dimensions['A'].width = 12
+            ws.column_dimensions['B'].width = 30
+            ws.column_dimensions['C'].width = 10
+            ws.column_dimensions['D'].width = 35
+            
+            # Speichern
+            wb.save(excel_path)
+            
+            self.show_message('Erfolg', f'Excel erstellt:\\n\\n{excel_path}\\n\\nGesamtstunden: {total_hours:.2f} h')
+            
+        except ImportError as e:
+            self.show_message('Fehler', f'openpyxl fehlt!\\nBitte installieren: pip install openpyxl\\n\\n{str(e)}')
         except Exception as e:
-            print(f"[APP CRITICAL] Build error: {e}")
-            traceback.print_exc()
-            raise
-
-    def on_start(self):
-        """Called after widget tree is built. Initialize critical services here."""
-        try:
-            print("[APP] on_start() called")
-            
-            # Install crash logger now that App context exists
-            _install_crash_logger()
-            print("[APP] Crash logger installed")
-            
-            # Initialize DB
-            path = os.path.join(self.user_data_dir, 'stundenerfassung.db')
-            db.init_db(path)
-            print(f"[APP] DB initialized at: {path}")
-        except Exception as e:
-            print(f"[APP] on_start() error: {e}")
-            traceback.print_exc()
+            import traceback
+            error_detail = traceback.format_exc()
+            self.show_message('Fehler', f'Excel-Fehler:\\n{str(e)}\\n\\nDetails in Console')
+            print("Excel Export Fehler:", error_detail)
+    
+    def show_message(self, title, message):
+        """Zeige Popup-Nachricht"""
+        content = BoxLayout(orientation='vertical', padding=10, spacing=10)
+        content.add_widget(Label(text=message))
+        btn = Button(text='OK', size_hint_y=None, height=50)
+        content.add_widget(btn)
+        
+        popup = Popup(title=title, content=content, size_hint=(0.8, 0.4))
+        btn.bind(on_release=popup.dismiss)
+        popup.open()
 
 
 if __name__ == '__main__':
-    PoCApp().run()
+    ZeiterfassungApp().run()

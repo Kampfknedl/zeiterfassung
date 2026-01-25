@@ -1,9 +1,4 @@
-kivy
-kivymd
+kivy==2.3.0
+openpyxl
 pillow
 pyjnius
-plyer
-fpdf2
-reportlab
-cython
-androidstorage4kivy

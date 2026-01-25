@@ -1,185 +1,155 @@
+"""
+Datenbank-Modul für Zeiterfassung
+Tabellen: customers (Über-Kunden), entries (Zeiteinträge)
+"""
 import sqlite3
-from pathlib import Path
+from datetime import datetime
 
 
-def log_error(msg, exc):
-    # Minimal stderr logging to avoid silent DB failures
+def get_connection(db_path):
+    """Erstelle Datenbankverbindung und Tabellen falls nicht vorhanden."""
+    conn = sqlite3.connect(db_path)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS customers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            hourly_rate REAL DEFAULT 0.0,
+            address TEXT,
+            email TEXT,
+            phone TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            customer_id INTEGER,
+            activity TEXT NOT NULL,
+            start_time TEXT NOT NULL,
+            end_time TEXT NOT NULL,
+            duration_hours REAL NOT NULL,
+            comment TEXT,
+            FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE
+        )
+    """)
+    conn.commit()
+    return conn
+
+
+def add_customer(db_path, name, hourly_rate=0.0, address="", email="", phone=""):
+    """Füge neuen Über-Kunden hinzu."""
     try:
-        print(f"DB error: {msg}: {exc}")
-    except Exception:
-        pass
-
-SCHEMA = '''
-CREATE TABLE IF NOT EXISTS customers (
-    id INTEGER PRIMARY KEY,
-    name TEXT UNIQUE,
-    address TEXT,
-    email TEXT,
-    phone TEXT
-);
-
-CREATE TABLE IF NOT EXISTS entries (
-    id INTEGER PRIMARY KEY,
-    customer TEXT,
-    activity TEXT,
-    start TEXT,
-    end TEXT,
-    duration_hours REAL,
-    notes TEXT
-);
-'''
+        conn = get_connection(db_path)
+        conn.execute(
+            "INSERT INTO customers (name, hourly_rate, address, email, phone) VALUES (?, ?, ?, ?, ?)",
+            (name, hourly_rate, address, email, phone)
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except sqlite3.IntegrityError:
+        return False  # Name bereits vorhanden
 
 
-def init_db(path):
-    p = Path(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(p)
-    cur = conn.cursor()
-    cur.executescript(SCHEMA)
+def get_all_customers(db_path):
+    """Hole alle Über-Kunden."""
+    conn = get_connection(db_path)
+    cursor = conn.execute("SELECT id, name, hourly_rate, address, email, phone FROM customers ORDER BY name")
+    customers = cursor.fetchall()
+    conn.close()
+    return customers
+
+
+def get_customer_by_name(db_path, name):
+    """Hole Über-Kunden anhand Name."""
+    conn = get_connection(db_path)
+    cursor = conn.execute(
+        "SELECT id, name, hourly_rate, address, email, phone FROM customers WHERE name = ?",
+        (name,)
+    )
+    customer = cursor.fetchone()
+    conn.close()
+    return customer
+
+
+def update_customer(db_path, customer_id, name, hourly_rate, address, email, phone):
+    """Aktualisiere Über-Kunden."""
+    try:
+        conn = get_connection(db_path)
+        conn.execute(
+            "UPDATE customers SET name=?, hourly_rate=?, address=?, email=?, phone=? WHERE id=?",
+            (name, hourly_rate, address, email, phone, customer_id)
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+
+
+def delete_customer(db_path, customer_id):
+    """Lösche Über-Kunden (inkl. aller Einträge durch CASCADE)."""
+    conn = get_connection(db_path)
+    conn.execute("DELETE FROM customers WHERE id = ?", (customer_id,))
     conn.commit()
     conn.close()
 
 
-def get_connection(path):
-    return sqlite3.connect(path)
-
-
-def get_customers(path):
-    conn = get_connection(path)
-    cur = conn.cursor()
-    cur.execute("SELECT name FROM customers ORDER BY name")
-    rows = [r[0] for r in cur.fetchall()]
+def add_entry(db_path, customer_id, activity, start_time, end_time, duration_hours, comment=""):
+    """Füge Zeiteintrag hinzu."""
+    conn = get_connection(db_path)
+    conn.execute(
+        "INSERT INTO entries (customer_id, activity, start_time, end_time, duration_hours, comment) VALUES (?, ?, ?, ?, ?, ?)",
+        (customer_id, activity, start_time, end_time, duration_hours, comment)
+    )
+    conn.commit()
     conn.close()
-    return rows
 
 
-def add_customer(path, name):
-    conn = get_connection(path)
-    try:
-        conn.execute("INSERT INTO customers (name, address, email, phone) VALUES (?, ?, ?, ?)", (name, '', '', ''))
-        conn.commit()
-    except Exception as e:
-        log_error("add_customer", e)
-    finally:
-        conn.close()
-
-
-def get_customer(path, name):
-    conn = get_connection(path)
-    cur = conn.cursor()
-    cur.execute("SELECT id, name, address, email, phone FROM customers WHERE name = ?", (name,))
-    row = cur.fetchone()
+def get_entries_by_customer(db_path, customer_id):
+    """Hole alle Einträge für einen Über-Kunden."""
+    conn = get_connection(db_path)
+    cursor = conn.execute(
+        "SELECT id, activity, start_time, end_time, duration_hours, comment FROM entries WHERE customer_id = ? ORDER BY start_time DESC",
+        (customer_id,)
+    )
+    entries = cursor.fetchall()
     conn.close()
-    return row
+    return entries
 
 
-def update_customer(path, name, address='', email='', phone=''):
-    conn = get_connection(path)
-    try:
-        conn.execute("UPDATE customers SET address = ?, email = ?, phone = ? WHERE name = ?", (address, email, phone, name))
-        conn.commit()
-    except Exception as e:
-        log_error("update_customer", e)
-    finally:
-        conn.close()
+def get_all_entries(db_path):
+    """Hole alle Einträge (für Übersicht)."""
+    conn = get_connection(db_path)
+    cursor = conn.execute(
+        "SELECT e.id, c.name, e.activity, e.start_time, e.end_time, e.duration_hours, e.comment FROM entries e JOIN customers c ON e.customer_id = c.id ORDER BY e.start_time DESC"
+    )
+    entries = cursor.fetchall()
+    conn.close()
+    return entries
 
 
-def rename_customer(path, old_name, new_name):
-    conn = get_connection(path)
-    try:
-        conn.execute("UPDATE customers SET name = ? WHERE name = ?", (new_name, old_name))
-        # Cascade to entries so UI lists remain consistent
-        conn.execute("UPDATE entries SET customer = ? WHERE customer = ?", (new_name, old_name))
-        conn.commit()
-    except Exception as e:
-        log_error("rename_customer", e)
-    finally:
-        conn.close()
+def delete_entry(db_path, entry_id):
+    """Lösche Zeiteintrag."""
+    conn = get_connection(db_path)
+    conn.execute("DELETE FROM entries WHERE id = ?", (entry_id,))
+    conn.commit()
+    conn.close()
 
 
-def update_customer_full(path, old_name, new_name=None, address='', email='', phone=''):
-    # Optionally rename and update details
-    if new_name and new_name != old_name:
-        rename_customer(path, old_name, new_name)
-        target_name = new_name
+def get_recent_activities(db_path, customer_id=None, limit=10):
+    """Hole häufigste Aktivitäten für Autocomplete."""
+    conn = get_connection(db_path)
+    if customer_id:
+        cursor = conn.execute(
+            "SELECT activity, COUNT(*) as cnt FROM entries WHERE customer_id = ? GROUP BY activity ORDER BY cnt DESC LIMIT ?",
+            (customer_id, limit)
+        )
     else:
-        target_name = old_name
-    conn = get_connection(path)
-    try:
-        conn.execute("UPDATE customers SET address = ?, email = ?, phone = ? WHERE name = ?", (address, email, phone, target_name))
-        conn.commit()
-    except Exception as e:
-        log_error("update_customer_full", e)
-    finally:
-        conn.close()
-
-
-def delete_customer(path, name):
-    conn = get_connection(path)
-    try:
-        conn.execute("DELETE FROM customers WHERE name = ?", (name,))
-        conn.commit()
-    except Exception as e:
-        log_error("delete_customer", e)
-    finally:
-        conn.close()
-
-
-def add_entry(path, customer, activity, start, end, duration):
-    conn = get_connection(path)
-    try:
-        conn.execute("INSERT INTO entries (customer,activity,start,end,duration_hours) VALUES (?,?,?,?,?)",
-                     (customer, activity, start, end, duration))
-        conn.commit()
-    except Exception as e:
-        log_error("add_entry", e)
-    finally:
-        conn.close()
-
-
-def get_entries(path, customer=None):
-    conn = get_connection(path)
-    cur = conn.cursor()
-    if customer and customer != '—':
-        cur.execute("SELECT * FROM entries WHERE customer = ? ORDER BY start DESC", (customer,))
-    else:
-        cur.execute("SELECT * FROM entries ORDER BY start DESC")
-    rows = cur.fetchall()
+        cursor = conn.execute(
+            "SELECT activity, COUNT(*) as cnt FROM entries GROUP BY activity ORDER BY cnt DESC LIMIT ?",
+            (limit,)
+        )
+    activities = [row[0] for row in cursor.fetchall()]
     conn.close()
-    return rows
+    return activities
 
-
-def get_recent_activities(path, prefix=None, limit=10):
-    conn = get_connection(path)
-    cur = conn.cursor()
-    if prefix:
-        like = f"{prefix}%"
-        cur.execute("SELECT activity, COUNT(*) as c FROM entries WHERE activity LIKE ? GROUP BY activity ORDER BY c DESC LIMIT ?", (like, limit))
-    else:
-        cur.execute("SELECT activity, COUNT(*) as c FROM entries WHERE activity IS NOT NULL GROUP BY activity ORDER BY c DESC LIMIT ?", (limit,))
-    rows = [r[0] for r in cur.fetchall() if r[0]]
-    conn.close()
-    return rows
-
-
-def update_entry(path, entry_id, notes=''):
-    """Update entry notes/comments"""
-    conn = get_connection(path)
-    try:
-        conn.execute("UPDATE entries SET notes = ? WHERE id = ?", (notes, entry_id))
-        conn.commit()
-    except Exception as e:
-        log_error("update_entry", e)
-    finally:
-        conn.close()
-
-
-def delete_entry(path, entry_id):
-    conn = get_connection(path)
-    try:
-        conn.execute("DELETE FROM entries WHERE id = ?", (entry_id,))
-        conn.commit()
-    except Exception as e:
-        log_error("delete_entry", e)
-    finally:
-        conn.close()

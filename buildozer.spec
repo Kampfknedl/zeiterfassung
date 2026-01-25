@@ -5,29 +5,31 @@ package.domain = org.tkideneb2
 
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,db
-source.exclude_dirs = android-sdk,java17,.git,__pycache__,.buildozer,bin,templates
-source.exclude_patterns = *.md,*.txt,*.bat,*.ps1,*.sh,*.spec,Dockerfile,*.zip
+source.exclude_dirs = android-sdk,java17,.git,__pycache__,.buildozer,bin,templates,.venv,venv
+source.exclude_patterns = *.md,*.bat,*.ps1,*.sh,buildozer_*.spec,*.json,*.log,Dockerfile,*.zip,*.pyc,main_old_backup.py
 # Nutze das stabile Kivy-Layout als Einstiegspunkt
 source.main = main.py
 
 version = 2.0
 
-# Python requirements for iOS and Android
-# IMPORTANT: Exact patch version required (python-for-android needs full version number)
-# Python 3.10.13 is the last stable 3.10 release, fully compatible with reportlab on Android
-requirements = python3==3.10.13,kivy,kivymd,pillow,plyer,pyjnius,reportlab,cython,androidstorage4kivy
+# Python requirements - CLEAN minimal setup (openpyxl nur für Desktop)
+requirements = python3==3.10.13,kivy==2.3.0,pillow,pyjnius
 
 # Android-specific requirements  
 android.permissions = WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,INTERNET,READ_MEDIA_DOCUMENTS
-android.api = 34
+android.api = 21
 android.minapi = 21
-android.archs = arm64-v8a,armeabi-v7a
+android.archs = arm64-v8a
 android.accept_sdk_license = True
 android.ndk = 25b
 android.skip_update = False
+android.skip_compile_pyc = True
 # Use preinstalled SDK/NDK inside Docker image
 android.sdk_path = /opt/android-sdk
 android.ndk_path = /opt/android-ndk
+# REMOVED GLES2 enforcement - let Android choose renderer to avoid hwui mutex crashes
+# android.add_env_vars = SDL_VIDEO_VULKAN=0,SDL_VIDEODRIVER=gles2,SDL_ANDROID_BLOCK_ON_PAUSE=1
+# android.opengl_es_version = 0x00020000
 
 # Android FileProvider configuration for sharing PDFs/CSVs
 android.add_resources = res
@@ -56,7 +58,7 @@ icon.filename = ./icon.png
 # P4A (Python-for-Android) settings
 p4a.bootstrap = sdl2
 p4a.arch = arm64-v8a
-p4a.ndk_api = 21
+p4a.ndk_api = 23
 
 # iOS specific arch (for M1/M2 Macs, use arm64; for Intel Macs, use x86_64)
 # You need to build on macOS for iOS
