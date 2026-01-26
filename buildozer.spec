@@ -13,7 +13,7 @@ source.main = main.py
 version = 2.0
 
 # Python requirements - CLEAN minimal setup (openpyxl nur für Desktop)
-requirements = python3==3.10.13,kivy==2.3.0,pillow,pyjnius
+requirements = python3==3.10.13,kivy==2.3.0,pyjnius
 
 # Android-specific requirements  
 android.permissions = WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,INTERNET,READ_MEDIA_DOCUMENTS
