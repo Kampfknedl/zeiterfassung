@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-Docker-basierter APK Builder für Zeiterfassung
+Docker-basierter APK Builder fuer Zeiterfassung
 .DESCRIPTION
 Erstellt eine Android APK mit Docker (keine lokale SDK-Installation erforderlich)
 #>
@@ -9,51 +9,40 @@ Erstellt eine Android APK mit Docker (keine lokale SDK-Installation erforderlich
 param(
     [ValidateSet("debug", "release")]
     [string]$BuildType = "debug",
-    
-    # Wir nutzen ein lokales Image, daher Pull standardmäßig überspringen
     [switch]$SkipDockerPull = $true,
     [switch]$KeepContainerLogs,
     [switch]$AutoInstall,
     [switch]$OpenFinder
 )
 
-# ============================================================================
-# KONFIGURATION
-# ============================================================================
 $DOCKER_IMAGE = "zeiterfassung-buildozer"
 $DOCKER_TAG = "latest"
 $PROJECT_NAME = "Zeiterfassung"
 $APK_NAME_PATTERN = "zeiterfassung-*.apk"
 
-# Farben
 $ColorSuccess = "Green"
 $ColorError = "Red"
 $ColorWarning = "Yellow"
 $ColorInfo = "Cyan"
 $ColorGray = "DarkGray"
 
-# ============================================================================
-# FUNKTIONEN
-# ============================================================================
-
 function Write-Log {
     param([string]$Message, [string]$Type = "Info")
-    
     $timestamp = Get-Date -Format "HH:mm:ss"
     $color = @{
         "Info"    = $ColorInfo
         "Success" = $ColorSuccess
         "Error"   = $ColorError
         "Warning" = $ColorWarning
+        "Gray"    = $ColorGray
     }[$Type]
-    
+    if (-not $color) { $color = $ColorInfo }
     Write-Host "[$timestamp] " -NoNewline -ForegroundColor $ColorGray
     Write-Host $Message -ForegroundColor $color
 }
 
 function Test-Docker {
-    Write-Log "Überprüfe Docker-Installation..." "Info"
-    
+    Write-Log "Pruefe Docker-Installation..." "Info"
     try {
         $version = docker --version 2>&1
         Write-Log "Docker gefunden: $version" "Success"
@@ -66,27 +55,27 @@ function Test-Docker {
 }
 
 function Pull-DockerImage {
-    Write-Log "Lokales Docker-Image wird vorausgesetzt (SkipDockerPull aktiv)." "Info"
+    Write-Log "Skip Docker pull (lokales Image erwartet)." "Info"
     return $true
 }
 
 function Build-APK {
     param([string]$BuildType, [string]$ProjectPath)
-    
     Write-Log "Starte APK-Build ($BuildType)..." "Info"
     Write-Log "Projekt-Pfad: $ProjectPath" "Info"
-    Write-Log ""
-    
-    $buildCommand = "buildozer -v android $BuildType"
-    
-    Write-Log "Docker-Befehl: docker run --rm -v '$ProjectPath`:/app' -w /app $DOCKER_IMAGE $buildCommand" "Info"
-    Write-Log ""
+    Write-Log "" "Info"
+    $buildArgs = @("buildozer", "-v", "android", $BuildType)
+    $buildCommandText = ($buildArgs -join " ")
+    Write-Log "Docker-Befehl: docker run --rm -v \"${ProjectPath}:/app\" -w /app $DOCKER_IMAGE $buildCommandText" "Info"
+    Write-Log "" "Info"
     Write-Log "Dies kann 5-15 Minuten dauern..." "Warning"
-    Write-Log ""
-    
-    # Build ausführen
-    docker run --rm -v "$ProjectPath`:/app" -w /app $DOCKER_IMAGE $buildCommand 2>&1 | Tee-Object -Variable buildLog
-    
+    Write-Log "" "Info"
+    $binPath = Join-Path $ProjectPath "bin"
+    if (-not (Test-Path $binPath)) { New-Item -ItemType Directory -Path $binPath | Out-Null }
+    $logFile = Join-Path $binPath "build_log_docker.txt"
+    docker run --rm -v "${ProjectPath}:/app" -w /app $DOCKER_IMAGE @buildArgs 2>&1 |
+        Tee-Object -Variable buildLog |
+        Tee-Object -FilePath $logFile
     $buildSuccess = $LASTEXITCODE -eq 0
     return @{
         Success = $buildSuccess
@@ -96,132 +85,73 @@ function Build-APK {
 
 function Find-APK {
     param([string]$ProjectPath)
-    
     $binPath = Join-Path $ProjectPath "bin"
-    
-    if (-not (Test-Path $binPath)) {
-        return $null
-    }
-    
+    if (-not (Test-Path $binPath)) { return $null }
     $apkFiles = @(Get-ChildItem -Path $binPath -Filter $APK_NAME_PATTERN -ErrorAction SilentlyContinue)
-    
-    if ($apkFiles.Count -gt 0) {
-        return $apkFiles | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    }
-    
+    if ($apkFiles.Count -gt 0) { return $apkFiles | Sort-Object LastWriteTime -Descending | Select-Object -First 1 }
     return $null
 }
 
 function Get-FileSize {
     param([string]$FilePath)
-    
-    if (Test-Path $FilePath) {
-        $size = (Get-Item $FilePath).Length / 1MB
-        return "{0:N2}" -f $size
-    }
-    
+    if (Test-Path $FilePath) { return "{0:N2}" -f ((Get-Item $FilePath).Length / 1MB) }
     return "N/A"
 }
 
 function Show-Results {
     param([object]$BuildResult, [string]$ProjectPath)
-    
-    Write-Log ""
-    Write-Log "════════════════════════════════════════" "Info"
-    
+    Write-Log "" "Info"
+    Write-Log "========================================" "Info"
     if ($BuildResult.Success) {
-        Write-Log "✓ BUILD ERFOLGREICH" "Success"
-        
+        Write-Log "Build erfolgreich." "Success"
         $apk = Find-APK $ProjectPath
         if ($apk) {
             $size = Get-FileSize $apk.FullName
-            Write-Log ""
-            Write-Log "APK-Informationen:" "Info"
-            Write-Log "  Datei: $($apk.Name)" "Success"
-            Write-Log "  Größe: $size MB" "Info"
-            Write-Log "  Pfad: $($apk.FullName)" "Info"
-            Write-Log "  Erstellt: $($apk.LastWriteTime)" "Info"
-            Write-Log ""
-            Write-Log "Nächste Schritte:" "Info"
-            
+            Write-Log "APK-Datei: $($apk.Name)" "Info"
+            Write-Log "Groesse: $size MB" "Info"
+            Write-Log "Pfad: $($apk.FullName)" "Info"
+            Write-Log "Zeit: $($apk.LastWriteTime)" "Info"
             if (Get-Command adb -ErrorAction SilentlyContinue) {
-                Write-Log "  1. Gerät verbinden" "Gray"
-                Write-Log "  2. Installieren: adb install `"$($apk.FullName)`"" "Gray"
+                Write-Log "adb install \"$($apk.FullName)\"" "Gray"
             } else {
-                Write-Log "  1. APK auf Android-Gerät übertragen" "Gray"
-                Write-Log "  2. APK öffnen und installieren" "Gray"
-                Write-Log "  (adb nicht im PATH gefunden)" "Warning"
+                Write-Log "adb nicht gefunden; APK manuell kopieren" "Warning"
             }
-            
             if ($OpenFinder) {
-                Write-Log ""
-                Write-Log "Öffne bin-Ordner..." "Info"
                 explorer.exe (Split-Path $apk.FullName)
             }
         } else {
-            Write-Log "⚠ Warnung: APK-Datei nicht gefunden" "Warning"
+            Write-Log "APK-Datei nicht gefunden." "Warning"
         }
     } else {
-        Write-Log "✗ BUILD FEHLGESCHLAGEN" "Error"
-        Write-Log ""
-        Write-Log "Troubleshooting:" "Warning"
-        Write-Log "  1. Überprüfe Docker: docker ps" "Gray"
-        Write-Log "  2. Überprüfe buildozer.spec" "Gray"
-        Write-Log "  3. Überprüfe requirements.txt" "Gray"
-        Write-Log "  4. Logs im bin/buildozer_output.log anschauen" "Gray"
+        Write-Log "Build fehlgeschlagen." "Error"
+        Write-Log "Pruefe bin/buildozer_output.log oder buildozer.log" "Warning"
     }
-    
-    Write-Log "════════════════════════════════════════" "Info"
-    Write-Log ""
+    Write-Log "========================================" "Info"
+    Write-Log "" "Info"
 }
-
-# ============================================================================
-# HAUPT-SKRIPT
-# ============================================================================
 
 function Main {
     Clear-Host
-    
-    Write-Host "╔════════════════════════════════════════════════════════╗" -ForegroundColor $ColorInfo
-    Write-Host "║  Docker APK Builder - $PROJECT_NAME" -ForegroundColor $ColorInfo
-    Write-Host "║  Build Type: $BuildType" -ForegroundColor $ColorInfo
-    Write-Host "╚════════════════════════════════════════════════════════╝" -ForegroundColor $ColorInfo
+    Write-Host "=== Docker APK Builder: $PROJECT_NAME ===" -ForegroundColor $ColorInfo
+    Write-Host "Build Type: $BuildType" -ForegroundColor $ColorInfo
     Write-Host ""
-    
-    # 1. Docker-Check
-    if (-not (Test-Docker)) {
-        exit 1
-    }
-    
-    # 2. Docker-Image pullen (optional)
+    if (-not (Test-Docker)) { exit 1 }
     Write-Host ""
     if (-not $SkipDockerPull) {
-        if (-not (Pull-DockerImage)) {
-            exit 1
-        }
-    } else {
-        Write-Log "Docker-Pull übersprungen" "Info"
-    }
-    
-    # 3. APK bauen
+        if (-not (Pull-DockerImage)) { exit 1 }
+    } else { Write-Log "Docker-Pull uebersprungen" "Info" }
     Write-Host ""
     $projectPath = (Get-Location).Path
     $result = Build-APK -BuildType $BuildType -ProjectPath $projectPath
-    
-    # 4. Ergebnisse anzeigen
     Show-Results -BuildResult $result -ProjectPath $projectPath
-    
-    # 5. Optional: Auto-Install
     if ($AutoInstall -and $result.Success) {
         $apk = Find-APK $projectPath
         if ($apk -and (Get-Command adb -ErrorAction SilentlyContinue)) {
-            Write-Log "Installiere APK auf Gerät..." "Info"
+            Write-Log "Installiere APK auf Geraet..." "Info"
             adb install "$($apk.FullName)"
         }
     }
-    
-    exit ($result.Success ? 0 : 1)
+    if ($result.Success) { exit 0 } else { exit 1 }
 }
 
-# Skript ausführen
 Main

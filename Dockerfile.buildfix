@@ -1,0 +1,8 @@
+FROM kivy/buildozer:latest
+
+# Patch buildozer um Root-Check zu überspringen  
+RUN sed -i 's/cont = input/cont = "y" # input/g' /home/user/.venv/lib/python3.12/site-packages/buildozer/__init__.py
+
+WORKDIR /home/user/buildozer
+ENTRYPOINT ["/bin/sh", "-c"]
+CMD [". /home/user/.venv/bin/activate && buildozer android debug"]
