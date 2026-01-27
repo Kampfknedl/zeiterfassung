@@ -1,0 +1,61 @@
+﻿name: Build APK - Android 16
+
+on:
+  push:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    - name: Build APK with Docker
+      run: |
+        docker run --rm \
+          -v $(pwd):/home/user/buildozer \
+          -w /home/user/buildozer \
+          -e BUILDOZER_LOG_LEVEL=2 \
+          kivy/buildozer:latest \
+          buildozer -v android release
+      timeout-minutes: 40
+
+    - name: Check APK
+      run: |
+        if [ -f bin/zeiterfassung-*-release-unsigned.apk ]; then
+          ls -lh bin/*.apk
+          echo "APK build successful!"
+        else
+          echo "APK not found!"
+          exit 1
+        fi
+
+    - name: Upload APK
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: zeiterfassung-apk
+        path: bin/*.apk
+        retention-days: 30
+
+    - name: Create GitHub Release
+      if: startsWith(github.ref, 'refs/tags/') && success()
+      uses: softprops/action-gh-release@v1
+      with:
+        files: bin/*.apk
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Cleanup
+      if: always()
+      run: |
+        rm -rf .buildozer bin/__pycache__
+        docker system prune -f
