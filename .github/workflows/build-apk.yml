@@ -64,15 +64,28 @@ allprojects {
 }
 EOF
 
+    - name: Debug buildozer.spec and main.py
+      run: |
+        echo "=== buildozer.spec ===" && head -20 buildozer.spec
+        echo "=== main.py ===" && head -20 main.py
+        echo "=== requirements.txt ===" && cat requirements.txt
+        python -m py_compile main.py db.py 2>&1 || true
+
     - name: Build APK
       run: |
-        export ANDROID_SDK_ROOT=$HOME/.android-sdk
-        export ANDROID_NDK_ROOT=$HOME/.android-ndk
         export BUILDOZER_WARN_ON_ROOT=0
-        buildozer -v android release
-      timeout-minutes: 40
+        buildozer -v android release 2>&1 | tee build.log || true
+      timeout-minutes: 50
       env:
         BUILDOZER_LOG_LEVEL: 2
+
+    - name: Check build result
+      run: |
+        if [ -f build.log ]; then
+          echo "=== LAST 100 LINES OF BUILD LOG ===" && tail -100 build.log
+        fi
+        ls -lh bin/*.apk 2>/dev/null || echo "No APK found"
+        exit 1
 
     - name: Check APK
       run: |
