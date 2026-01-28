@@ -59,15 +59,13 @@ jobs:
       env:
         BUILDOZER_LOG_LEVEL: 2
 
-    - name: Check APK
+    - name: Show buildozer logs on failure
+      if: failure()
       run: |
-        if [ -f bin/zeiterfassung-*-release-unsigned.apk ]; then
-          ls -lh bin/*.apk
-          echo "APK build successful!"
-        else
-          echo "APK not found!"
-          exit 1
-        fi
+        echo "=== Buildozer log ===" && cat ~/.buildozer/android/platform/build-arm64-v8a/dists/*/build/build.log 2>/dev/null || echo "Log not found"
+        echo "=== Gradle wrapper location ===" && find ~/.buildozer -name "gradlew" 2>/dev/null | head -5
+        echo "=== APK check ===" && ls -lh bin/*.apk 2>/dev/null || echo "No APK in bin/"
+        echo "=== Build outputs ===" && find ~/.buildozer/android/platform/build* -name "*.apk" 2>/dev/null | head -10 || echo "No APK found anywhere"
 
     - name: Upload APK
       if: success()
