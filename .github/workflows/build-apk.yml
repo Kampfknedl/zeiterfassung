@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     
     steps:
     - name: Checkout code
@@ -39,53 +39,25 @@ jobs:
         python -m pip install --upgrade pip
         pip install "cython<3" buildozer
 
-    - name: Prepare gradle.properties
-      run: |
-        mkdir -p ~/.gradle
-        cat > ~/.gradle/gradle.properties <<'EOF'
-kotlin.version=1.8.22
-org.gradle.jvmargs=-Xmx2048m
-org.gradle.parallel=true
-org.gradle.workers.max=2
-EOF
-
-    - name: Create Gradle init script to force Kotlin
+    - name: Setup Gradle with Kotlin pinning
       run: |
         mkdir -p ~/.gradle/init.d
-        cat > ~/.gradle/init.d/force-kotlin.gradle <<'EOF'
-allprojects {
-  configurations.all {
-    resolutionStrategy {
-      force "org.jetbrains.kotlin:kotlin-stdlib:1.8.22"
-      force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22"
-      force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22"
-    }
-  }
-}
-EOF
+        echo 'allprojects { configurations.all { resolutionStrategy { force "org.jetbrains.kotlin:kotlin-stdlib:1.8.22"; force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22"; force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22" } } }' > ~/.gradle/init.d/force-kotlin.gradle
+        mkdir -p ~/.gradle
+        echo 'kotlin.version=1.8.22' >> ~/.gradle/gradle.properties
+        echo 'org.gradle.jvmargs=-Xmx2048m' >> ~/.gradle/gradle.properties
 
-    - name: Debug buildozer.spec and main.py
+    - name: Validate Python files
       run: |
-        echo "=== buildozer.spec ===" && head -20 buildozer.spec
-        echo "=== main.py ===" && head -20 main.py
-        echo "=== requirements.txt ===" && cat requirements.txt
-        python -m py_compile main.py db.py 2>&1 || true
+        python -m py_compile main.py db.py
 
     - name: Build APK
       run: |
         export BUILDOZER_WARN_ON_ROOT=0
-        buildozer -v android release 2>&1 | tee build.log || true
+        buildozer -v android release
       timeout-minutes: 50
       env:
         BUILDOZER_LOG_LEVEL: 2
-
-    - name: Check build result
-      run: |
-        if [ -f build.log ]; then
-          echo "=== LAST 100 LINES OF BUILD LOG ===" && tail -100 build.log
-        fi
-        ls -lh bin/*.apk 2>/dev/null || echo "No APK found"
-        exit 1
 
     - name: Check APK
       run: |
@@ -119,4 +91,3 @@ EOF
       if: always()
       run: |
         rm -rf .buildozer bin/__pycache__
-        docker system prune -f
