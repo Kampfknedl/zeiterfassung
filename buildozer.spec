@@ -13,7 +13,7 @@ source.main = main.py
 version = 2.0
 
 # Python requirements - CLEAN minimal setup (openpyxl nur für Desktop)
-requirements = python3==3.10.13,kivy==2.3.0,pyjnius
+requirements = python3==3.10.13,kivy==2.3.0,kivymd==0.104.2,pyjnius
 
 # Android 16 (API 35) - Galaxy S24+
 android.permissions = WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,INTERNET
