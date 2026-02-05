@@ -51,10 +51,15 @@ jobs:
       run: |
         python -m py_compile main.py db.py
 
-    - name: Build APK
+    - name: Build APK (debug first, then try release)
       run: |
         export BUILDOZER_WARN_ON_ROOT=0
-        buildozer -v android release
+        echo "Starting debug build (faster, produces unsigned debug APK)"
+        buildozer -v android debug
+        echo "Attempting release build (may require signing); failure will not stop artifact collection"
+        set +e
+        buildozer -v android release || echo "Release build failed (non-fatal)"
+        set -e
       timeout-minutes: 50
       env:
         BUILDOZER_LOG_LEVEL: 2
