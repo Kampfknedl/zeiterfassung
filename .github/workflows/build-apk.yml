@@ -78,11 +78,14 @@ jobs:
       if: always()
       run: |
         mkdir -p bin
-        if find ~/.buildozer -name "*release*.apk" 2>/dev/null | head -1 | xargs -I {} cp {} bin/ 2>/dev/null; then
-          echo "APK copied successfully:"
+        # Find first matching artifact: prefer release APK, then any APK, then AAB
+        artifact=$(find ~/.buildozer -type f \( -name "*release*.apk" -o -name "*.apk" -o -name "*.aab" \) 2>/dev/null | head -1)
+        if [ -n "$artifact" ]; then
+          cp "$artifact" bin/
+          echo "Copied artifact: $artifact"
           ls -lh bin/
         else
-          echo "ERROR: No APK found in buildozer directories"
+          echo "ERROR: No APK or AAB found in buildozer directories"
           exit 1
         fi
 
@@ -90,15 +93,15 @@ jobs:
       if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: zeiterfassung-apk
-        path: bin/*.apk
+        name: zeiterfassung-artifact
+        path: bin/*
         retention-days: 30
 
     - name: Create GitHub Release
       if: startsWith(github.ref, 'refs/tags/') && success()
       uses: softprops/action-gh-release@v1
       with:
-        files: bin/*.apk
+        files: bin/*
         draft: false
         prerelease: false
       env:
