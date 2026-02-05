@@ -26,11 +26,6 @@ android.ndk = 25b
 android.skip_update = False
 android.skip_compile_pyc = True
 
-# Android FileProvider configuration for sharing PDFs
-android.add_resources = res
-android.gradle_dependencies = androidx.core:core:1.12.0,androidx.appcompat:appcompat:1.6.1
-android.gradle_options = org.gradle.jvmargs=-Xmx2048m,org.gradle.dependency.strict=false
-
 orientation = portrait
 fullscreen = 0
 icon.filename = ./icon.png
